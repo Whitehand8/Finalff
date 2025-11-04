@@ -1,10 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../models/vtt_scene.dart';
-import '../../models/Token.dart';
-import '../../services/vtt_service.dart';
-import '../../services/vtt_socket.dart';
+import 'package:trpg_frontend/models/vtt_scene.dart';
+import 'package:trpg_frontend/models/token.dart';
+import 'package:trpg_frontend/services/vtt_service.dart';
+import 'package:trpg_frontend/services/vtt_socket.dart';
 
 class VttCanvas extends StatefulWidget {
   final int roomId;

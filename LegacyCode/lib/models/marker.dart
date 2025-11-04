@@ -1,4 +1,4 @@
-class Token {
+class Marker {
   final int id;
   final String name;
   double x, y;
@@ -11,7 +11,7 @@ class Token {
   Map<String, dynamic> stats;
   Map<String, dynamic> properties;
 
-  Token({
+  Marker({
     required this.id,
     required this.name,
     required this.x,
@@ -27,11 +27,11 @@ class Token {
     this.properties = const {},
   });
 
-  factory Token.fromJson(Map<String, dynamic> j) {
+  factory Marker.fromJson(Map<String, dynamic> j) {
     final img = j['image'];
-    return Token(
+    return Marker(
       id: j['id'],
-      name: j['name'] ?? 'Token',
+      name: j['name'] ?? 'Marker',
       x: (j['x'] ?? 0).toDouble(),
       y: (j['y'] ?? 0).toDouble(),
       rotation: (j['rotation'] ?? 0).toDouble(),

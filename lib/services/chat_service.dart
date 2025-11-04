@@ -49,8 +49,9 @@ class ChatService with ChangeNotifier {
       IO.OptionBuilder()
           .setTransports(['websocket'])
           .enableForceNew()
-          .setExtraHeaders({
-            'authorization': 'Bearer $token', // 소문자 필수
+          // ✅ [수정] 헤더 방식을 쿼리 파라미터 방식으로 변경
+          .setQuery({
+            'token': token,
           })
           .build(),
     );

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import '../models/vtt_scene.dart';
-import '../models/Token.dart';
+import 'package:trpg_frontend/models/vtt_scene.dart';
+import 'package:trpg_frontend/models/token.dart';
 
 class VttApi {
   final String base; // 예: http://localhost:4000

@@ -42,12 +42,14 @@ class VttSocketService with ChangeNotifier {
     }
 
     _socket = IO.io(
-      '$_baseUrl/vtt', // [API] 'vtt' 네임스페이스
+      'http://localhost:11123/chat', // 백엔드 ChatGateway 포트 및 네임스페이스
       IO.OptionBuilder()
           .setTransports(['websocket'])
-          .setQuery({'roomId': roomId}) // 방 입장을 위한 쿼리
-          .disableAutoConnect()
-          .setAuth({'token': token}) // [수정됨] WsJwtGuard 인증을 위한 토큰 전달
+          .enableForceNew()
+          // ✅ [수정] 헤더 방식을 쿼리 파라미터 방식으로 변경
+          .setQuery({
+            'token': token,
+          })
           .build(),
     );
 
