@@ -1,10 +1,10 @@
-// lib/services/vtt_service.dart
 import 'package:dio/dio.dart';
 import 'package:trpg_frontend/models/token.dart'; // VTT 토큰 모델
 import 'package:trpg_frontend/models/vtt_scene.dart'; // VTT 맵(씬) 모델
 import 'ApiClient.dart'; // Dio 클라이언트
 
 /// VTT (맵, 토큰) 관련 REST API 서비스
+/// [참고] VttSocketService와 달리 일회성 데이터 요청/생성/수정/삭제를 담당합니다.
 class VttService {
   static VttService? _instance;
   static VttService get instance => _instance ??= VttService._();
@@ -55,13 +55,14 @@ class VttService {
         '/rooms/$roomId/vttmaps',
         data: createData,
       );
-      return VttScene.fromJson(res.data as Map<String, dynamic>);
+      // [수정됨] 백엔드는 생성된 엔티티가 아닌 { message, vttMap } 객체를 반환
+      return VttScene.fromJson(res.data['vttMap'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception('Failed to create VTT map: ${e.message}');
     }
   }
 
-  /// 맵(씬) 정보 업데이트
+  /// 맵(씬) 정보 업데이트 (GM이 맵 설정을 변경할 때)
   /// [API] PATCH /vttmaps/:mapId
   Future<VttScene> updateVttMap(String mapId, Map<String, dynamic> updateData) async {
     // updateData 예시: { 'name': '수정된 맵 이름' }
@@ -71,7 +72,8 @@ class VttService {
         '/vttmaps/$mapId',
         data: updateData,
       );
-      return VttScene.fromJson(res.data as Map<String, dynamic>);
+      // [수정됨] 백엔드는 { message, vttMap } 객체를 반환
+      return VttScene.fromJson(res.data['vttMap'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception('Failed to update VTT map: ${e.message}');
     }
@@ -148,10 +150,13 @@ class VttService {
     }
   }
 
-  /// 토큰 정보 업데이트 (이동, 이름 변경 등)
+  /// 토큰 정보 업데이트 (이름, 이미지, 시트 연결 등)
   /// [API] PATCH /tokens/:id
+  /// 
+  /// [중요] 이 함수는 토큰의 *데이터*를 변경할 때 사용합니다.
+  /// 실시간 위치(x, y) 이동은 VttSocketService.moveToken()을 사용해야 합니다.
   Future<Token> updateToken(String id, Map<String, dynamic> updateData) async {
-    // updateData 예시: { 'x': newX, 'y': newY } 또는 { 'name': 'New Name' }
+    // updateData 예시: { 'name': 'New Name', 'imageUrl': '...' }
     // 백엔드 UpdateTokenDto와 일치해야 함
     try {
       final res = await ApiClient.instance.dio.patch(

@@ -1,4 +1,3 @@
-// lib/screens/room_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart'; // Provider import
@@ -73,8 +72,19 @@ class RoomScreen extends StatefulWidget {
         ),
         // VttSocketService 주입 (TRPG Room의 String ID 사용)
         ChangeNotifierProvider(
-          create: (_) => VttSocketService(room.id!),
-        ),
+      create: (_) => VttSocketService(
+        // 1. 이름 없는 위치 인수(positional argument)를 삭제합니다.
+        // room.id!, // <-- 🚨 이 줄을 삭제하세요.
+
+        // 2. 이름이 지정된 'roomId' 인수는 그대로 둡니다. (필수)
+        roomId: room.id!, 
+        
+        // 3. 'onRoomEvent' 인수도 그대로 둡니다. (필수)
+        onRoomEvent: (eventName, data) {
+          debugPrint('[VTT Room Event] $eventName: $data');
+        },
+      ),
+    ),
       ],
       child: RoomScreen(room: room),
     );
@@ -831,3 +841,4 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 } // End of RoomScreenState
+
