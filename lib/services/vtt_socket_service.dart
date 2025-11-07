@@ -3,17 +3,14 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:trpg_frontend/models/token.dart';
 import 'package:trpg_frontend/models/vtt_scene.dart';
 import 'package:trpg_frontend/services/token_manager.dart';
-// [수정됨] ApiClient import 제거. VTT 소켓은 다른 포트와 URL을 사용합니다.
-// import 'package:trpg_frontend/services/api_client.dart'; 
 
 class VttSocketService with ChangeNotifier {
-  // [수정됨] VTT Gateway의 정확한 URL과 네임스페이스를 명시
   static const String _socketUrl = 'http://localhost:11123/vtt';
 
   final String roomId;
   IO.Socket? _socket;
 
-  VttScene? _scene; // 현재 활성화된 맵(씬)
+  VttScene? _scene;
   VttScene? get scene => _scene;
 
   final Map<String, Token> _tokens = {};
@@ -22,41 +19,51 @@ class VttSocketService with ChangeNotifier {
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
-  // [신규] 맵 삭제 등 룸 전체 이벤트를 처리하기 위한 콜백
+  // --- 🚨 [신규] ---
+  // 연결 시도 중복을 막기 위한 내부 상태 플래그
+  bool _isConnecting = false;
+  // --- 🚨 [신규 끝] ---
+
   final Function(String eventName, dynamic data) onRoomEvent;
 
-  VttSocketService(String s, {
+  VttSocketService({
     required this.roomId,
     required this.onRoomEvent,
   });
 
-  /// 소켓 연결 및 맵(씬) 참여
-  Future<void> connectAndJoin(String mapId) async {
-    // 맵만 변경하는 경우 (이미 소켓은 연결됨)
-    if (_socket != null && _socket!.connected) {
-      debugPrint('[VttSocket] 맵 변경: $mapId');
-      // 기존 맵에서 나간 후 새 맵에 참여 (선택 사항이지만 권장)
-      if (_scene != null) {
-        _socket!.emit('leaveMap', {'mapId': _scene!.id});
-      }
-      _socket!.emit('joinMap', {'mapId': mapId});
+  /// [신규] 방 입장 시 소켓 서버에 연결하고 VTT '룸'에만 참여합니다.
+  Future<void> connect() async {
+    // 이미 연결 완료되었다면 아무것도 하지 않음
+    if (_isConnected) {
+      debugPrint('[VttSocket] 이미 연결되어 있습니다.');
       return;
     }
+
+    // --- 🚨 [수정] ---
+    // 'connecting' 이나 'status' 대신 내부 플래그(_isConnecting)를 확인합니다.
+    if (_isConnecting) {
+      debugPrint('[VttSocket] 이미 연결 시도 중입니다.');
+      return;
+    }
+    // --- 🚨 [수정 끝] ---
+
+    // 연결 시도 시작
+    _isConnecting = true;
 
     final token = await TokenManager.instance.getAccessToken();
     if (token == null) {
       debugPrint('[VttSocket] 인증 토큰이 없어 연결할 수 없습니다.');
+      _isConnecting = false; // [수정] 연결 시도 종료
       return;
     }
 
     debugPrint('[VttSocket] VTT 소켓 연결 시도... URL: $_socketUrl');
 
     _socket = IO.io(
-      _socketUrl, // [수정됨] ApiClient.baseUrl 대신 명시적 URL 사용
+      _socketUrl,
       IO.OptionBuilder()
           .setTransports(['websocket'])
           .enableForceNew()
-          // [수정됨] 인증 방식: Query -> Auth (ws-auth.middleware.ts와 일치)
           .setAuth({'token': token})
           .build(),
     );
@@ -65,11 +72,10 @@ class VttSocketService with ChangeNotifier {
 
     _socket!.onConnect((_) {
       _isConnected = true;
+      _isConnecting = false; // [수정] 연결 성공 시 플래그 리셋
       debugPrint('[VttSocket] VTT 소켓 연결 성공 (ID: ${_socket!.id})');
       
-      // [수정됨] 룸과 맵에 순차적으로 참여
       _socket!.emit('joinRoom', {'roomId': roomId});
-      _socket!.emit('joinMap', {'mapId': mapId});
       
       notifyListeners();
     });
@@ -80,7 +86,7 @@ class VttSocketService with ChangeNotifier {
 
     _socket!.on('joinedMap', (data) {
       debugPrint('[VttSocket] 맵 참여 완료 및 초기 상태 수신');
-      _tokens.clear(); // 맵을 바꿀 때 토큰 초기화
+      _tokens.clear(); 
 
       if (data['map'] != null) {
         _scene = VttScene.fromJson(data['map']);
@@ -97,7 +103,6 @@ class VttSocketService with ChangeNotifier {
     _socket!.on('mapUpdated', (data) {
       debugPrint('[VttSocket] 맵 업데이트 수신');
       if (data != null && data['id'] == _scene?.id) {
-        // [수정됨] VttScene.fromJson이 data['map']이 아닌 data 자체를 받도록
         _scene = VttScene.fromJson(data); 
         notifyListeners();
       }
@@ -105,6 +110,11 @@ class VttSocketService with ChangeNotifier {
 
     _socket!.on('mapCreated', (data) {
       debugPrint('[VttSocket] 새 맵 생성됨');
+      final newMapId = (data as Map<String, dynamic>)['id'] as String?;
+      if (newMapId != null && _scene == null) { 
+         debugPrint('[VttSocket] 생성된 새 맵 $newMapId 에 자동으로 입장합니다.');
+         joinMap(newMapId);
+      }
       onRoomEvent('mapCreated', data);
     });
 
@@ -143,18 +153,48 @@ class VttSocketService with ChangeNotifier {
 
     _socket!.onDisconnect((_) {
       _isConnected = false;
+      _isConnecting = false; // [수정] 연결 끊김 시 플래그 리셋
+      _scene = null; 
+      _tokens.clear();
       debugPrint('[VttSocket] VTT 소켓 연결 끊김');
       notifyListeners();
     });
 
     _socket!.onError((data) => debugPrint('[VttSocket] VTT 소켓 오류: $data'));
+    
+    _socket!.onConnectError((data) {
+       debugPrint('[VttSocket] VTT 소켓 연결 오류: $data');
+        _isConnected = false; 
+        _isConnecting = false; // [수정] 연결 오류 시 플래그 리셋
+        notifyListeners();
+    });
 
-    _socket!.connect();
+    _socket!.connect(); // 비동기 연결 시도
+  }
+
+  /// [수정됨] 특정 맵(씬)에 참여합니다.
+  Future<void> joinMap(String mapId) async {
+    if (_socket == null || !_socket!.connected) {
+      debugPrint('[VttSocket] 소켓이 연결되지 않아 맵에 참여할 수 없습니다.');
+      return;
+    }
+    
+    if (_scene != null && _scene!.id == mapId) {
+      debugPrint('[VttSocket] 이미 맵 $mapId 에 입장해 있습니다.');
+      return;
+    }
+
+    debugPrint('[VttSocket] 맵 변경/참여 시도: $mapId');
+    
+    if (_scene != null) {
+      _socket!.emit('leaveMap', {'mapId': _scene!.id});
+    }
+    
+    _socket!.emit('joinMap', {'mapId': mapId});
   }
 
   // --- 소켓 이벤트 송신 (Emitter) ---
 
-  /// [신규] 맵(씬) 정보 업데이트 (GM 전용)
   void sendMapUpdate(VttScene updatedScene) {
     if (_socket == null || !_socket!.connected) return;
 
@@ -167,7 +207,6 @@ class VttSocketService with ChangeNotifier {
     _socket!.emit('updateMap', payload);
   }
 
-  /// [신규] 토큰 이동 (실시간)
   void moveToken(String tokenId, double x, double y) {
     if (_socket == null || !_socket!.connected) return;
 

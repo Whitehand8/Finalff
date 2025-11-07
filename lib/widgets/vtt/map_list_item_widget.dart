@@ -25,8 +25,10 @@ class MapListItemWidget extends StatelessWidget {
     }
 
     try {
-      // VttSocketService의 connectAndJoin을 호출하여 맵에 접속
-      context.read<VttSocketService>().connectAndJoin(map.id!);
+      // --- 🚨 [수정됨] ---
+      // VttSocketService의 connectAndJoin -> joinMap 메서드를 호출
+      context.read<VttSocketService>().joinMap(map.id!);
+      // --- 🚨 [수정 끝] ---
       
       // 성공적으로 join을 요청한 후 모달을 닫음
       Navigator.of(context).pop(); 

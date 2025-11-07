@@ -25,7 +25,9 @@ import 'package:trpg_frontend/widgets/chat/chat_list_widget.dart';
 import 'package:trpg_frontend/services/vtt_socket_service.dart';
 import 'package:trpg_frontend/features/vtt/vtt_canvas.dart';
 import 'package:trpg_frontend/widgets/vtt/map_select_modal.dart';
-// --- ✅ ---
+// --- 🚨 [신규] (기능 1) 토큰 생성 모달 Import ---
+import 'package:trpg_frontend/widgets/vtt/create_token_modal.dart';
+// --- 🚨 [신규 끝] ---
 
 // --- ✅ 3. Dice 관련 Import 추가 ---
 import 'package:trpg_frontend/widgets/dice/dice_roll_modal.dart';
@@ -73,13 +75,7 @@ class RoomScreen extends StatefulWidget {
         // VttSocketService 주입 (TRPG Room의 String ID 사용)
         ChangeNotifierProvider(
       create: (_) => VttSocketService(
-        // 1. 이름 없는 위치 인수(positional argument)를 삭제합니다.
-        // room.id!, // <-- 🚨 이 줄을 삭제하세요.
-
-        // 2. 이름이 지정된 'roomId' 인수는 그대로 둡니다. (필수)
         roomId: room.id!, 
-        
-        // 3. 'onRoomEvent' 인수도 그대로 둡니다. (필수)
         onRoomEvent: (eventName, data) {
           debugPrint('[VTT Room Event] $eventName: $data');
         },
@@ -105,7 +101,6 @@ class RoomScreen extends StatefulWidget {
             body: Center(child: Text('방을 불러올 수 없습니다: ${snapshot.error}')),
           );
         }
-        // ✨ RoomScreen.create 메서드를 사용하여 Provider와 함께 생성
         return RoomScreen.create(room: snapshot.data!);
       },
     );
@@ -122,25 +117,30 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   List<Participant> _participants = [];
   bool _isParticipantsLoading = false;
 
-  // --- ✨ GM 플래그 및 사용자 ID 추가 ---
   bool _isCurrentUserGm = false;
-  int? _currentUserId; // 현재 로그인된 사용자의 ID (from AuthService, int)
-  // --- ✨ ---
+  int? _currentUserId; 
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _room = widget.room;
-    _initializeScreen(); // ✨ 초기화 로직 통합
+    _initializeScreen(); 
   }
 
-  // --- ✨ 초기화 함수 (기존과 동일) ---
+  // --- ✨ 초기화 함수 (VTT 연결 코드 추가) ---
   Future<void> _initializeScreen() async {
+    // VTT 소켓 자동 연결
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<VttSocketService>().connect();
+        debugPrint('[RoomScreen] VTT Socket connect() 호출됨');
+      }
+    });
+
     await _loadCurrentUserId(); // AuthService에서 사용자 ID 가져오기
     await _loadParticipants(); // 참여자 목록 로드 (내부에서 _checkCurrentUserRole 호출)
   }
-  // --- ✨ ---
 
   // --- ✨ 현재 사용자 ID 로드 함수 (기존과 동일) ---
   Future<void> _loadCurrentUserId() async {
@@ -151,7 +151,6 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       });
     }
   }
-  // --- ✨ ---
 
   @override
   void dispose() {
@@ -167,6 +166,8 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _validateRoomStillExists();
       context.read<NpcProvider>().fetchNpcs();
       _loadParticipants(); 
+      
+      context.read<VttSocketService>().connect(); // VTT 연결 재시도
     }
   }
 
@@ -221,16 +222,13 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       });
     }
   }
-  // --- ✨ ---
 
-  // --- ✅ 방 관리 함수들 (축약 해제) ---
+  // --- 🚨 [복원됨] 방 관리 함수들 ---
   Future<void> _leaveRoom() async {
-    // 방장인지 확인
     if (_room.creatorId == _currentUserId) {
       _showCannotLeaveAsCreatorDialog();
       return;
     }
-    // 일반 참여자
     _showLeaveRoomDialog();
   }
 
@@ -257,12 +255,12 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           TextButton(onPressed: Navigator.of(context).pop, child: const Text('취소')),
           TextButton(
             onPressed: () async {
-              Navigator.of(context).pop(); // 다이얼로그 닫기
+              Navigator.of(context).pop(); 
               try {
                 await RoomService.leaveRoom(_room.id!);
                 if (!mounted) return;
                 _showSuccess('방에서 나갔습니다.');
-                context.go(Routes.rooms); // 방 목록으로 이동
+                context.go(Routes.rooms); 
               } on RoomServiceException catch (e) {
                 if(mounted) _showError('방 나가기 실패: ${e.message}');
               }
@@ -292,12 +290,12 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           TextButton(onPressed: Navigator.of(context).pop, child: const Text('취소')),
           TextButton(
             onPressed: () async {
-              Navigator.of(context).pop(); // 다이얼로그 닫기
+              Navigator.of(context).pop(); 
               try {
                 await RoomService.deleteRoom(_room.id!);
                 if (!mounted) return;
                 _showSuccess('방이 삭제되었습니다.');
-                context.go(Routes.rooms); // 방 목록으로 이동
+                context.go(Routes.rooms); 
               } on RoomServiceException catch (e) {
                 if(mounted) _showError('방 삭제 실패: ${e.message}');
               }
@@ -314,7 +312,6 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
        await RoomService.transferCreator(_room.id!, newCreatorId);
        if (!mounted) return;
        _showSuccess('방장이 위임되었습니다.');
-       // 방 정보(creatorId)가 변경되었으므로 새로고침
        _validateRoomStillExists(); 
        _loadParticipants();
      } on RoomServiceException catch (e) {
@@ -359,10 +356,10 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Future<void> _updateParticipantRole(int participantId, String newRole) async {
     try {
       await RoomService.updateParticipantRole(_room.id!,
-          participantId.toString(), newRole); // API가 String ID를 받을 경우 .toString()
+          participantId.toString(), newRole); 
       if (!mounted) return;
       _showSuccess('역할이 변경되었습니다.');
-      _loadParticipants(); // 목록 새로고침
+      _loadParticipants(); 
     } on RoomServiceException catch (e) {
       if (!mounted) return;
       _showError('역할 변경 실패: ${e.message}');
@@ -374,7 +371,7 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _showError('역할 변경은 방장만 가능합니다.');
       return;
     }
-    final participantIdController = TextEditingController(); // Participant ID 입력용
+    final participantIdController = TextEditingController(); 
     final roleController = TextEditingController();
     showDialog(
       context: context,
@@ -383,12 +380,12 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField( // Participant ID 입력 필드
+            TextField( 
                 controller: participantIdController,
-                keyboardType: TextInputType.number, // 숫자 입력
+                keyboardType: TextInputType.number, 
                 decoration:
-                    const InputDecoration(labelText: 'Participant ID')), // 레이블 변경
-            TextField( // 역할 입력 필드
+                    const InputDecoration(labelText: 'Participant ID')), 
+            TextField( 
                 controller: roleController,
                 decoration:
                     const InputDecoration(labelText: '새 역할 (GM/PLAYER)')),
@@ -401,21 +398,19 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             onPressed: () {
               final idText = participantIdController.text.trim();
               final roleText =
-                  roleController.text.trim().toUpperCase(); // 역할은 대문자로
-              final participantId = int.tryParse(idText); // int로 변환 시도
+                  roleController.text.trim().toUpperCase(); 
+              final participantId = int.tryParse(idText); 
 
               if (participantId == null) {
-                // 유효한 숫자인지 확인
                 _showError('유효한 Participant ID를 입력해주세요.');
                 return;
               }
               if (roleText != 'GM' && roleText != 'PLAYER') {
-                // 역할 유효성 검사
                 _showError('역할은 GM 또는 PLAYER 여야 합니다.');
                 return;
               }
-              Navigator.of(context).pop(); // 다이얼로그 닫기
-              _updateParticipantRole(participantId, roleText); // 업데이트 함수 호출
+              Navigator.of(context).pop(); 
+              _updateParticipantRole(participantId, roleText); 
             },
             child: const Text('변경'),
           ),
@@ -423,14 +418,14 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
     );
   }
-  // --- ---
+  // --- 🚨 [복원 끝] ---
 
-  // --- ✅ NPC 관련 UI 호출 함수 (축약 해제) ---
+
+  // --- 🚨 [복원됨] NPC 관련 UI 호출 함수 ---
   void _showNpcListModal() {
     showDialog(
       context: context,
       builder: (dialogContext) {
-        // Consumer를 사용하여 NpcProvider의 상태 변화를 실시간으로 반영
         return Consumer<NpcProvider>(
           builder: (context, npcProvider, child) {
             final npcs = npcProvider.npcs;
@@ -449,7 +444,6 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       : IconButton(
                           icon: const Icon(Icons.refresh),
                           tooltip: '새로고침',
-                          // read를 사용하여 NpcProvider의 함수 호출
                           onPressed: () =>
                               context.read<NpcProvider>().fetchNpcs()),
                 ],
@@ -470,8 +464,8 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               return NpcListItem(
                                 npc: npc,
                                 onTap: () {
-                                  Navigator.pop(dialogContext); // 목록 모달 닫기
-                                  _showNpcDetailModal(npc);   // 상세 모달 열기
+                                  Navigator.pop(dialogContext); 
+                                  _showNpcDetailModal(npc);   
                                 },
                               );
                             },
@@ -492,10 +486,8 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _showNpcDetailModal(Npc npc) {
     showDialog(
       context: context,
-      // NpcDetailModal이 NpcProvider를 사용할 수 있도록
-      // Provider를 한 단계 더 주입 (ChangeNotifierProvider.value 사용)
       builder: (_) => ChangeNotifierProvider.value(
-        value: context.read<NpcProvider>(), // 기존 Provider 인스턴스 전달
+        value: context.read<NpcProvider>(), 
         child: NpcDetailModal(npc: npc, isGm: _isCurrentUserGm),
       ),
     );
@@ -509,12 +501,12 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       builder: (_) => ChangeNotifierProvider.value(
-        value: context.read<NpcProvider>(), // NpcCreateModal도 Provider가 필요
+        value: context.read<NpcProvider>(), 
         child: NpcCreateModal(roomId: _room.id!),
       ),
     );
   }
-  // --- ✨ ---
+  // --- 🚨 [복원 끝] ---
 
   // --- VTT 맵 선택 모달 (기존과 동일) ---
   void _showMapSelectModal() {
@@ -522,18 +514,16 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) {
         return MapSelectModal(
-          roomId: _room.id!, // TRPG 룸 ID (String) 전달
+          roomId: _room.id!, 
           isGm: _isCurrentUserGm,
         );
       },
     );
   }
-  // --- ✅ ---
 
-  // --- ✅ 주사위 굴림 모달 호출 함수 (신규) ---
+  // --- ✅ 주사위 굴림 모달 호출 함수 (기존과 동일) ---
   void _showDiceRollModal() {
-    // 1. 현재 사용자 닉네임 찾기
-    String nickname = '참여자'; // 기본값
+    String nickname = '참여자'; 
     if (_currentUserId != null) {
       final me = _participants.firstWhere(
         (p) => p.id == _currentUserId,
@@ -542,90 +532,145 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       nickname = me.nickname;
     }
 
-    // 2. 모달 띄우기
     showDialog(
       context: context,
       builder: (dialogContext) {
-        // ChatService는 Provider를 통해 주입되므로 모달이 context.read로 접근 가능
         return DiceRollModal(rollerNickname: nickname);
       },
     );
   }
-  // --- ✅ ---
+  
+  // --- 🚨 [신규] (기능 1) 사진 삽입(토큰 생성) 모달 호출 ---
+  void _showCreateTokenModal() {
+    final vttSocket = context.read<VttSocketService>();
+    // 씬(맵)에 입장한 상태인지 확인
+    if (vttSocket.scene == null) {
+      _showError('맵에 먼저 입장해야 이미지를 추가할 수 있습니다.');
+      return;
+    }
+    
+    // GM만 토큰을 생성할 수 있게 제한
+    if (!_isCurrentUserGm) {
+      _showError('GM만 이미지 토큰을 추가할 수 있습니다.');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        // CreateTokenModal은 내부에서 context.read<VttSocketService>()를 사용하므로
+        // 별도 Provider 주입 없이 바로 호출
+        return const CreateTokenModal();
+      },
+    );
+  }
+  // --- 🚨 [신규 끝] ---
+
+
+  // --- 🚨 [신규] (기능 3) 격자 토글 함수 ---
+  void _toggleGrid() {
+    final vttSocket = context.read<VttSocketService>();
+    final currentScene = vttSocket.scene;
+
+    if (currentScene == null) {
+      _showError('맵에 입장한 상태에서만 격자를 변경할 수 있습니다.');
+      return;
+    }
+
+    // vtt_scene.dart에 추가한 copyWith 메서드 사용
+    final updatedScene = currentScene.copyWith(
+      showGrid: !currentScene.showGrid, // 현재 상태를 반전
+    );
+
+    // vtt_socket_service의 sendMapUpdate 호출
+    vttSocket.sendMapUpdate(updatedScene);
+  }
+  // --- 🚨 [신규 끝] ---
 
 
   // === UI 빌드 ===
   @override
   Widget build(BuildContext context) {
-    // ✨ NpcProvider 에러 상태 감시 (기존과 동일)
     final npcError = context.select((NpcProvider p) => p.error);
     if (npcError != null && ModalRoute.of(context)?.isCurrent == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showError('NPC 오류: $npcError');
-        context.read<NpcProvider>().clearError(); // 에러 메시지 클리어
+        context.read<NpcProvider>().clearError(); 
       });
     }
 
+    // --- 🚨 [신규] (기능 3) 격자 아이콘을 동적으로 변경하기 위해 scene을 watch ---
+    final bool isGridVisible = context.watch<VttSocketService>().scene?.showGrid ?? true;
+    // --- 🚨 [신규 끝] ---
+
     return Scaffold(
       key: _scaffoldKey,
-      // --- ✅ AppBar 수정 (주사위 버튼 onPressed 연결) ---
+      // --- 🚨 [수정됨] AppBar에 새 기능 버튼 추가 ---
       appBar: AppBar(
         title: Text(_room.name),
-        backgroundColor: const Color(0xFF8C7853), // 테마 색상 적용
+        backgroundColor: const Color(0xFF8C7853), 
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(), // 뒤로가기
+          onPressed: () => context.pop(), 
         ),
         actions: [
-          // 주사위 버튼 (onPressed 수정)
+          // 주사위
           IconButton(
             icon: const Icon(Icons.casino),
             tooltip: '주사위 굴리기',
-            onPressed: _showDiceRollModal, // ✅ 로직 연결
-          ),
-          
-          // --- 맵 선택 버튼 (기존과 동일) ---
-          IconButton(
-            icon: const Icon(Icons.map_outlined), // 맵 아이콘
-            tooltip: '맵 선택/로드',
-            onPressed: _showMapSelectModal, // 맵 선택 모달 호출
+            onPressed: _showDiceRollModal, 
           ),
 
-          // ✨ NPC 목록 버튼 (기존과 동일)
+          // --- 🚨 [신규] (기능 3) 격자 토글 버튼 ---
           IconButton(
-            icon: const Icon(Icons.book_outlined), // 아이콘 변경
-            tooltip: 'NPC 목록',
-            onPressed: _showNpcListModal, // NPC 목록 모달 호출
+            icon: Icon(isGridVisible ? Icons.grid_on : Icons.grid_off),
+            tooltip: '격자 보이기/숨기기',
+            onPressed: _toggleGrid, // [신규] 핸들러 연결
           ),
-          // 참여자 목록 버튼 (기존과 동일)
+
+          // --- 🚨 [신규] (기능 1) 사진 삽입 버튼 ---
+          IconButton(
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            tooltip: '이미지 토큰 추가',
+            onPressed: _showCreateTokenModal, // [신규] 핸들러 연결
+          ),
+          
+          // 맵 선택
+          IconButton(
+            icon: const Icon(Icons.map_outlined), 
+            tooltip: '맵 선택/로드',
+            onPressed: _showMapSelectModal, 
+          ),
+
+          // NPC 목록
+          IconButton(
+            icon: const Icon(Icons.book_outlined), 
+            tooltip: 'NPC 목록',
+            onPressed: _showNpcListModal, // [복원됨]
+          ),
+          
+          // 참여자 목록
           IconButton(
             icon: const Icon(Icons.people),
             tooltip: '참여자 목록',
             onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
-          // --- 방 관리 메뉴 (기존과 동일) ---
+          
+          // 방 관리 메뉴
           PopupMenuButton<String>(
             onSelected: (value) {
+              // [복원됨]
               switch (value) {
-                case 'leave':
-                  _showLeaveRoomDialog();
-                  break;
-                case 'delete':
-                  _showDeleteRoomDialog();
-                  break;
-                case 'transfer':
-                  _showTransferCreatorDialog();
-                  break;
-                case 'updateRole':
-                  _showUpdateRoleDialog();
-                  break;
+                case 'leave': _showLeaveRoomDialog(); break;
+                case 'delete': _showDeleteRoomDialog(); break;
+                case 'transfer': _showTransferCreatorDialog(); break;
+                case 'updateRole': _showUpdateRoleDialog(); break;
               }
             },
             itemBuilder: (context) => [
               const PopupMenuItem<String>(
                 value: 'leave',
-                child:
-                    ListTile(leading: Icon(Icons.exit_to_app), title: Text('방 나가기')),
+                child: ListTile(leading: Icon(Icons.exit_to_app), title: Text('방 나가기')),
               ),
               const PopupMenuItem<String>(
                 value: 'delete',
@@ -648,10 +693,10 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
-          // --- ✨ ---
         ],
       ),
-      // --- ✅ Body (기존과 동일) ---
+      // --- 🚨 [수정 끝] ---
+      
       body: Consumer<NpcProvider>(
           builder: (context, npcProvider, child) {
         if (npcProvider.isLoading && npcProvider.npcs.isEmpty) {
@@ -660,9 +705,7 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
         return Stack(
           children: [
-            // VTT Canvas
             const Positioned.fill(child: VttCanvas()), 
-            // 채팅 UI
             ChatListWidget(
               participants: _participants,
               currentUserId: _currentUserId,
@@ -670,8 +713,8 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ],
         );
       }),
-      // --- ✅ ---
-      // --- ✅ 참여자 Drawer (축약 해제) ---
+      
+      // --- 🚨 [복원됨] 참여자 Drawer ---
       endDrawer: Drawer(
         child: Column(
           children: [
@@ -692,29 +735,24 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       onPressed: _loadParticipants),
             ),
             Expanded(
-              // 참여자 리스트
               child: _participants.isEmpty
                   ? const Center(child: Text('참여자가 없습니다.'))
                   : ListView.builder(
                       itemCount: _participants.length,
                       itemBuilder: (context, index) {
                         final p = _participants[index];
-                        // ✨ 방장 ID와 Participant ID 비교 (Room.creatorId 타입 확인 필요)
                         final bool isCreator =
                             _room.creatorId != null && p.id == _room.creatorId;
                         return ListTile(
-                          // ✨ Participant.nickname 사용
                           leading: CircleAvatar(
                               child: Text(p.nickname.isNotEmpty
                                   ? p.nickname[0].toUpperCase()
                                   : '?')),
                           title: Text(p.nickname),
-                          // ✨ Participant.id 표시
                           subtitle: Text('ID: ${p.id} / Role: ${p.role}'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // 방장/GM 아이콘
                               if (isCreator)
                                 const Tooltip(
                                     message: '방장',
@@ -734,34 +772,34 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
-      // --- ✨ ---
-      // --- ✨ 하단 바 (기존과 동일) ---
+      // --- 🚨 [복원 끝] ---
+
       bottomNavigationBar: _buildBottomBar(),
-      // --- ✨ GM 전용 NPC 생성 버튼 (기존과 동일) ---
+      
+      // --- 🚨 [복원됨] NPC 생성 버튼 ---
       floatingActionButton: _isCurrentUserGm
           ? FloatingActionButton(
-              onPressed: _showCreateNpcModal, // NPC 생성 모달 호출
+              onPressed: _showCreateNpcModal, // [복원됨]
               tooltip: 'NPC 생성',
               child: const Icon(Icons.add),
-              backgroundColor: Colors.brown[700], // 색상 조정
+              backgroundColor: Colors.brown[700], 
             )
-          : null, // GM 아니면 숨김
+          : null, 
       floatingActionButtonLocation:
-          FloatingActionButtonLocation.endDocked, // 버튼 위치 조정
-      // --- ✨ ---
+          FloatingActionButtonLocation.endDocked, 
+      // --- 🚨 [복원 끝] ---
     );
   }
 
-  // 하단 바 (BottomAppBar + 채팅 입력)
+  // --- 🚨 [복원됨] 하단 바 및 채팅 함수 ---
   Widget _buildBottomBar() {
     return BottomAppBar(
-      shape: const CircularNotchedRectangle(), // FAB 부분 홈 파기 (선택적)
-      notchMargin: 6.0, // 홈 간격 (선택적)
+      shape: const CircularNotchedRectangle(), 
+      notchMargin: 6.0, 
       child: _buildBottomChatBar(),
     );
   }
 
-  // 채팅 입력 바 (키보드 높이 감안)
   Widget _buildBottomChatBar() {
     return Container(
       padding: EdgeInsets.only(
@@ -769,13 +807,11 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           right: 8.0,
           top: 4.0,
           bottom:
-              MediaQuery.of(context).viewInsets.bottom + 4.0 // 키보드 패딩
+              MediaQuery.of(context).viewInsets.bottom + 4.0 
           ),
       
-      // ✅ 1. Consumer<ChatService>로 감싸서 chatService의 변경 사항을 구독합니다.
       child: Consumer<ChatService>(
         builder: (context, chatService, child) {
-          // ✅ 2. chatService의 현재 연결 상태를 가져옵니다.
           final bool isConnected = chatService.isConnected;
 
           return Row(
@@ -783,22 +819,18 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               Expanded(
                 child: TextField(
                   controller: _chatController,
-                  // ✅ 3. (UX 개선) 연결 상태에 따라 힌트 텍스트 변경
                   decoration: InputDecoration(
                     hintText: isConnected ? '메시지 입력...' : '채팅 연결 중...',
                     border: InputBorder.none,
-                    isDense: true, // 높이 줄이기
+                    isDense: true, 
                   ),
-                  // ✅ 4. 연결된 상태에서만 Enter 키로 전송
                   onSubmitted: isConnected ? (_) => _handleSendChat() : null,
-                  // ✅ 5. (UX 개선) 연결 안 됐으면 입력창 비활성화
                   enabled: isConnected,
                 ),
               ),
               IconButton(
                 icon: const Icon(Icons.send),
                 tooltip: '메시지 전송',
-                // ✅ 6. 연결된 상태에서만 전송 버튼 활성화 (null이면 비활성화됨)
                 onPressed: isConnected ? _handleSendChat : null,
               ),
             ],
@@ -808,31 +840,26 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  // --- 채팅 메시지 전송 핸들러 (기존과 동일) ---
   void _handleSendChat() {
     final text = _chatController.text.trim();
-    if (text.isEmpty) return; // 빈 메시지 무시
+    if (text.isEmpty) return; 
 
-    // Provider를 통해 ChatService의 sendMessage 호출
     try {
       context.read<ChatService>().sendMessage(text);
-      _chatController.clear(); // 전송 성공 시 입력창 비우기
+      _chatController.clear(); 
     } catch (e) {
       _showError('메시지 전송 실패: $e');
     }
   }
-  // --- ✅ ---
 
-  // 에러 메시지 표시 (SnackBar)
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).removeCurrentSnackBar(); // 기존 스낵바 닫기
+    ScaffoldMessenger.of(context).removeCurrentSnackBar(); 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
     );
   }
 
-  // 성공 메시지 표시 (SnackBar)
   void _showSuccess(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -840,5 +867,5 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
   }
+  // --- 🚨 [복원 끝] ---
 } // End of RoomScreenState
-

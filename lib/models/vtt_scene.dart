@@ -1,5 +1,3 @@
-// lib/models/vtt_scene.dart
-
 /// VTT 맵(씬)을 나타내는 모델
 /// [수정됨] 백엔드 VttMap 엔티티/DTO와 완벽히 동기화
 class VttScene {
@@ -72,57 +70,75 @@ class VttScene {
       imageY: (j['imageY'] as num?)?.toDouble() ?? 0.0,
       
       // --- 로컬 전용 필드 (서버 값 X) ---
-      // [수정됨] 백엔드에 width/height/isActive가 없으므로 JSON에서 파싱하지 않음.
-      // 필요시 로컬에서 별도 관리해야 함.
-      localWidth: (j['width'] as num?)?.toInt() ?? 1000, // 이전 로직 유지
-      localHeight: (j['height'] as num?)?.toInt() ?? 800, // 이전 로직 유지
-      isActive: j['isActive'] as bool? ?? false, // 이전 로직 유지
+      localWidth: (j['width'] as num?)?.toInt() ?? 1000, 
+      localHeight: (j['height'] as num?)?.toInt() ?? 800, 
+      isActive: j['isActive'] as bool? ?? false, 
 
       properties: props,
     );
   }
 
   /// 맵 업데이트(UpdateVttMapDto)를 위한 JSON
-  /// [API] PATCH /vttmaps/:mapId
-  /// [Socket] emit('updateMap', ...)
   Map<String, dynamic> toUpdateJson() {
-    // [수정됨] 백엔드의 UpdateVttMapDto에 *실제로 있는* 필드만 전송
     return {
       'name': name,
       'imageUrl': backgroundUrl,
       'gridType': gridType,
       'gridSize': gridSize,
       'showGrid': showGrid,
-      
-      // [신규] 새 기능 필드 전송
       'imageScale': imageScale,
       'imageX': imageX,
       'imageY': imageY,
-      
-      // [제거됨] width, height, gridColor, gridOpacity 등은
-      // 백엔드 UpdateVttMapDto에 없으므로 전송하지 않음.
     };
   }
 
   /// 새 맵 생성(CreateVttMapDto)을 위한 JSON
-  /// [API] POST /rooms/:roomId/vttmaps
   Map<String, dynamic> toCreateJson() {
-    // [수정됨] 백엔드의 CreateVttMapDto에 *실제로 있는* 필드만 전송
     return {
       'name': name,
       'imageUrl': backgroundUrl,
       'gridType': gridType,
       'gridSize': gridSize,
       'showGrid': showGrid,
-
-      // [신규] 새 기능 필드 전송
       'imageScale': imageScale,
       'imageX': imageX,
       'imageY': imageY,
-      
-      // [제거됨] width, height, gridColor, gridOpacity 등은
-      // 백엔드 CreateVttMapDto에 없으므로 전송하지 않음.
     };
-    // roomId는 VttService의 API 경로로 전달됨
   }
+
+  // --- 🚨 [신규] (기능 3)을 위한 copyWith 메서드 ---
+  VttScene copyWith({
+    String? id,
+    String? roomId,
+    String? name,
+    String? backgroundUrl,
+    String? gridType,
+    int? gridSize,
+    bool? showGrid,
+    double? imageScale,
+    double? imageX,
+    double? imageY,
+    int? localWidth,
+    int? localHeight,
+    bool? isActive,
+    Map<String, dynamic>? properties,
+  }) {
+    return VttScene(
+      id: id ?? this.id,
+      roomId: roomId ?? this.roomId,
+      name: name ?? this.name,
+      backgroundUrl: backgroundUrl ?? this.backgroundUrl,
+      gridType: gridType ?? this.gridType,
+      gridSize: gridSize ?? this.gridSize,
+      showGrid: showGrid ?? this.showGrid,
+      imageScale: imageScale ?? this.imageScale,
+      imageX: imageX ?? this.imageX,
+      imageY: imageY ?? this.imageY,
+      localWidth: localWidth ?? this.localWidth,
+      localHeight: localHeight ?? this.localHeight,
+      isActive: isActive ?? this.isActive,
+      properties: properties ?? this.properties,
+    );
+  }
+  // --- 🚨 [신규 끝] ---
 }
