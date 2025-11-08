@@ -28,6 +28,7 @@ class VttService {
       );
       
       final List<dynamic> data = res.data as List<dynamic>;
+      // [중요] VttScene.fromJson이 백엔드 VttMapDto와 일치해야 함
       return data
           .map((item) => VttScene.fromJson(item as Map<String, dynamic>))
           .toList();
@@ -45,11 +46,12 @@ class VttService {
   Future<VttScene> getVttMap(String mapId) async {
     try {
       final res = await _apiClient.dio.get('$_vttMapPath/$mapId');
-      // [참고] 백엔드가 { message, vttMap }을 반환하므로 data['vttMap']을 파싱
+      
+      // [수정됨] 백엔드는 { message, vttMap } 객체를 반환
       if (res.data != null && res.data['vttMap'] != null) {
          return VttScene.fromJson(res.data['vttMap'] as Map<String, dynamic>);
       }
-      // VttMapDto를 바로 반환하는 경우 (백엔드 응답에 따라 다름)
+      // VttMapDto를 바로 반환하는 경우 (호환성 유지)
       return VttScene.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       debugPrint('[VttService] getVttMap Error: ${e.response?.data ?? e.message}');
@@ -62,14 +64,19 @@ class VttService {
 
   /// 새로운 맵(씬) 생성하기
   /// [API] POST /vttmaps/rooms/:roomId/vttmaps
-  Future<VttScene> createVttMap(String roomId, String name) async {
-    final String path = '$_vttMapPath/rooms/$roomId/vttmaps';
-    final Map<String, dynamic> body = {'name': name};
-
+  Future<VttScene> createVttMap(String roomId, String name) async { // <-- 1. Map -> String name으로 변경
+    // [수정됨] 백엔드 vttmap.controller.ts의 경로와 일치하도록 수정
+    final String path = '$_vttMapPath/rooms/$roomId/vttmaps'; // <-- 2. /vttmaps 접두사 추가
+    
+    // 백엔드의 CreateVttMapDto와 일치해야 함
+    final Map<String, dynamic> body = {'name': name}; // <-- 3. body가 name을 사용하도록 수정
+    
     try {
-      final res = await _apiClient.dio.post(path, data: body);
-      
-      // [수정됨] 백엔드는 { message, vttMap } 객체를 반환
+      final res = await _apiClient.dio.post(
+        path, // 수정된 경로 사용
+        data: body,
+      );
+      // [수정됨] 백엔드는 생성된 엔티티가 아닌 { message, vttMap } 객체를 반환
       if (res.data != null && res.data['vttMap'] != null) {
         return VttScene.fromJson(res.data['vttMap'] as Map<String, dynamic>);
       } else {
@@ -93,7 +100,11 @@ class VttService {
         data: updateData,
       );
       // [수정됨] 백엔드는 { message, vttMap } 객체를 반환
-      return VttScene.fromJson(res.data['vttMap'] as Map<String, dynamic>);
+      if (res.data != null && res.data['vttMap'] != null) {
+        return VttScene.fromJson(res.data['vttMap'] as Map<String, dynamic>);
+      } else {
+         throw Exception('맵 업데이트 응답 형식이 올바르지 않습니다.');
+      }
     } on DioException catch (e) {
       debugPrint('[VttService] updateVttMap Error: ${e.response?.data ?? e.message}');
       throw Exception('맵 업데이트 실패: ${e.response?.data['message'] ?? e.message}');
@@ -106,14 +117,16 @@ class VttService {
   /// 맵(씬) 삭제하기
   /// [API] DELETE /vttmaps/:mapId
   Future<void> deleteVttMap(String mapId) async {
+    final String path = '$_vttMapPath/$mapId';
     try {
-      await _apiClient.dio.delete('$_vttMapPath/$mapId');
-      return;
+      // ApiClient의 dio 인스턴스를 사용하여 delete 요청
+      await _apiClient.dio.delete(path);
     } on DioException catch (e) {
-      debugPrint('[VttService] deleteVttMap Error: ${e.response?.data ?? e.message}');
+      debugPrint('[VttService] deleteMap Error: ${e.response?.data ?? e.message}');
+      // 백엔드 vttmap.controller.ts의 deleteVttMap 참조
       throw Exception('맵 삭제 실패: ${e.response?.data['message'] ?? e.message}');
     } catch (e) {
-      debugPrint('[VttService] deleteVttMap Error: $e');
+      debugPrint('[VttService] deleteMap Error: $e');
       throw Exception('알 수 없는 오류 발생: $e');
     }
   }
@@ -127,7 +140,7 @@ class VttService {
   }) async {
     try {
       final res = await _apiClient.dio.post(
-        '$_vttMapPath/rooms/$roomId/vttmaps/presigned-url',
+        '$_vttMapPath/rooms/$roomId/vttmaps/presigned-url', // [수정됨] 접두사 추가
         data: {
           'fileName': fileName,
           'contentType': contentType,
@@ -155,8 +168,8 @@ class VttService {
     try {
       // --- 🚨 [수정됨] 경로 및 파라미터 방식 변경 ---
       final res = await _apiClient.dio.get(
-        _tokenPath, 
-        queryParameters: {'mapId': mapId},
+        _tokenPath, // '/tokens'
+        queryParameters: {'mapId': mapId}, // ?mapId=...
       );
       // --- 🚨 [수정 끝] ---
       
@@ -175,40 +188,21 @@ class VttService {
 
   /// 새 토큰 생성하기
   /// [API] POST /tokens
-  Future<Token> createToken({
-    required String mapId,
-    required String name,
-    String? imageUrl,
-    double x = 100.0,
-    double y = 100.0,
-    double width = 100.0, 
-    double height = 100.0,
-    int? characterSheetId,
-    int? npcId,
-  }) async {
-    // --- 🚨 [수정됨] 함수 시그니처 및 API 경로 변경 ---
+  Future<Token> createToken(String mapId, Map<String, dynamic> createData) async {
     try {
-      final Map<String, dynamic> body = {
+      // --- 🚨 [수정됨] API 경로 및 body 수정 ---
+      // mapId를 body에 포함
+      final body = {
+        ...createData,
         'mapId': mapId,
-        'name': name,
-        'imageUrl': imageUrl,
-        'x': x,
-        'y': y,
-        'width': width,
-        'height': height,
-        'isVisible': true,
-        'characterSheetId': characterSheetId,
-        'npcId': npcId,
       };
       
-      body.removeWhere((key, value) => value == null);
-      
-      // [수정] 경로에서 '/maps/:mapId' 제거
       final res = await _apiClient.dio.post(
         _tokenPath, // '/tokens'
         data: body, 
       );
-      
+      // --- 🚨 [수정 끝] ---
+
       // 백엔드 응답은 { message, token } 형태
       if (res.data != null && res.data['token'] != null) {
         return Token.fromJson(res.data['token']);
@@ -222,10 +216,9 @@ class VttService {
       debugPrint('[VttService] createToken Error: $e');
       throw Exception('알 수 없는 오류 발생: $e');
     }
-    // --- 🚨 [수정 끝] ---
   }
 
-  /// 토큰 정보 업데이트 (이름, 이미지, 시트 연결, 크기 등)
+  /// 토큰 정보 업데이트 (이름, 이미지, 시트 연결 등)
   /// [API] PATCH /tokens/:id
   Future<Token> updateToken(String id, Map<String, dynamic> updateData) async {
     try {
@@ -235,7 +228,7 @@ class VttService {
       );
       
       // 백엔드 응답은 { message, token } 형태
-      if (res.data != null && res.data['token'] != null) {
+       if (res.data != null && res.data['token'] != null) {
         return Token.fromJson(res.data['token']);
       } else {
          throw Exception('토큰 업데이트 응답 형식이 올바르지 않습니다.');
@@ -257,7 +250,7 @@ class VttService {
       return;
     } on DioException catch (e) {
       debugPrint('[VttService] deleteToken Error: ${e.response?.data ?? e.message}');
-      throw Exception('토큰 삭제 실패: ${e.response?.data['message'] ?? e.message}');
+      throw Exception('맵 삭제 실패: ${e.response?.data['message'] ?? e.message}');
     } catch (e) {
       debugPrint('[VttService] deleteToken Error: $e');
       throw Exception('알 수 없는 오류 발생: $e');
