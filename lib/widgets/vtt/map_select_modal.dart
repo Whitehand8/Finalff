@@ -75,7 +75,16 @@ class _MapSelectModalState extends State<MapSelectModal> {
 
                 try {
                   // 1. vtt_service.dart의 createVttMap 함수 호출
-                  await VttService.instance.createVttMap(widget.roomId, name);
+                  final Map<String, dynamic> createData = {
+                'name': name,
+                'width': 1000, // 맵 생성 시 기본 너비
+                'height': 800, // 맵 생성 시 기본 높이
+                'gridSize': 50, // 기본 그리드 크기
+                'showGrid': true, // 기본값
+                // (필요시 vtt_scene.dart의 toCreateJson 참조)
+              };
+
+              await VttService.instance.createVttMap(widget.roomId, createData);
                   
                   if (!mounted) return;
                   

@@ -40,57 +40,52 @@ class _VttCanvasState extends State<VttCanvas> {
     super.didChangeDependencies();
   }
 
-  /// [수정] 맵/씬의 상태 변화에 따라 컨트롤러를 동기화하는 로직
+  /// [최종 수정] 맵/씬의 상태 변화에 따라 컨트롤러를 동기화하는 로직
   void _syncControllerWithScene(VttScene? scene) {
     // 1. 사용자가 캔버스를 조작 중(드래그/줌)일 때는 덮어쓰기 방지
     if (_isInteracting) return;
 
-    Matrix4 targetMatrix; // 이 빌드에서 컨트롤러가 가져야 할 목표 매트릭스
-
-    // bool isSceneSaved = scene != null &&
-    //     (scene.imageX != 0.0 || scene.imageY != 0.0 || scene.imageScale != 1.0);
-    
-    // [신규] 씬에 저장된 위치/축척 값이 있는지 확인
+    // 씬에 저장된 위치/축척 값이 있는지 확인 (부동소수점 오차 감안)
     final bool isSceneSaved = scene != null &&
-        (scene.imageX.abs() > 0.001 || // 0.0과 정확히 비교하지 않음
+        (scene.imageX.abs() > 0.001 ||
          scene.imageY.abs() > 0.001 ||
          (scene.imageScale - 1.0).abs() > 0.001);
 
+    // 2. 씬 ID가 변경되었는가? (맵 입장/퇴장/변경)
+    if (scene?.id != _currentSceneId) {
+      _currentSceneId = scene?.id; // 씬 ID 즉시 업데이트
+      Matrix4 targetMatrix;
 
-    if (scene == null) {
-      // 2. 씬이 없음 (맵에서 나감) -> 무조건 중앙으로
-      targetMatrix = _defaultCenterMatrix;
-    } else {
-      // 3. 씬이 있음
-      if (isSceneSaved) {
-        // 3a. '저장된 씬'(0,0,1 아님) -> 씬의 위치/축척으로 설정
+      if (scene == null) {
+        // 2a. 씬이 없음 (맵에서 나감) -> 중앙으로
+        targetMatrix = _defaultCenterMatrix;
+      } else if (isSceneSaved) {
+        // 2b. '저장된 맵'에 입장 -> 맵 데이터로
         targetMatrix = Matrix4.identity()
           ..translate(scene.imageX, scene.imageY)
           ..scale(scene.imageScale);
       } else {
-        // 3b. '새 씬'(0,0,1)이 로드됨
-        // [핵심] 맵이 방금 바뀐 경우(_currentSceneId != scene.id)에만 중앙으로 리셋.
-        // 이미 이 맵에 있는데(ID가 같음) 씬 정보가 (0,0,1)로 왔다면,
-        // (예: 토큰 이동) 컨트롤러를 덮어쓰면 안 됨 (사용자 조작 보존).
-        if (_currentSceneId != scene.id) {
-          // 맵이 '새 맵'으로 방금 변경됨 -> 중앙으로
-          targetMatrix = _defaultCenterMatrix;
-        } else {
-          // 이미 '새 맵'에 머무는 중 -> 컨트롤러 덮어쓰기 중지 (사용자 조작 허용)
-          // [수정] 씬 ID가 같으면 현재 씬 ID를 업데이트할 필요 없음
-          _currentSceneId = scene.id; // 이 라인은 사실상 불필요하나, 안정성을 위해 유지
-          return; 
-        }
+        // 2c. '새 맵'(0,0,1)에 입장 -> 중앙으로
+        targetMatrix = _defaultCenterMatrix;
       }
+      
+      // 맵이 바뀌었으니 컨트롤러 값을 업데이트 예약
+      _updateControllerValue(targetMatrix);
+      return; // 맵 변경 로직 끝
     }
 
-    // 4. 씬 ID 업데이트 (맵이 변경된 경우에만)
-    if (_currentSceneId != scene?.id) {
-      _currentSceneId = scene?.id;
+    // 3. 씬 ID가 같다 (같은 맵에 머무는 중)
+    // (예: 토큰 이동으로 리빌드, 또는 다른 유저가 맵 패닝)
+    if (scene != null && isSceneSaved) {
+      // 3a. '저장된 맵'에 머무는 중: 
+      // 다른 유저가 맵을 움직였을 수 있으니 동기화
+      final Matrix4 sceneMatrix = Matrix4.identity()
+        ..translate(scene.imageX, scene.imageY)
+        ..scale(scene.imageScale);
+      _updateControllerValue(sceneMatrix);
     }
-
-    // 5. 계산된 목표(targetMatrix)와 현재 컨트롤러 값이 다를 때만 안전하게 업데이트
-    _updateControllerValue(targetMatrix);
+    // 3b. '새 맵'(0,0,1)에 머무는 중 (isSceneSaved == false):
+    //    -> 🚨 아무것도 하지 않는다! (버그 수정: 사용자 조작을 보존)
   }
 
 
@@ -123,18 +118,6 @@ class _VttCanvasState extends State<VttCanvas> {
     final currentScene = vttSocket.scene;
     if (currentScene == null) return;
 
-    // [신규] 맵이 (0,0,1) 상태일 때 사용자가 움직인 경우,
-    // (0,0,1)로 다시 되돌아가는 것을 막기 위해 값 보정
-    final bool isSceneDefault = (currentScene.imageX.abs() < 0.001 &&
-                                 currentScene.imageY.abs() < 0.001 &&
-                                 (currentScene.imageScale - 1.0).abs() < 0.001);
-                                 
-    // 맵이 기본값(0,0,1)이고 사용자 조작도 (0,0,1)과 비슷하면 전송 안 함
-    if (isSceneDefault && 
-        (newX.abs() < 0.001 && newY.abs() < 0.001 && (newScale - 1.0).abs() < 0.001)) {
-      return;
-    }
-
     final updatedScene = currentScene.copyWith(
       imageScale: newScale,
       imageX: newX,
@@ -152,7 +135,7 @@ class _VttCanvasState extends State<VttCanvas> {
     final tokens = vttSocket.tokens.values.toList();
     final isConnected = vttSocket.isConnected;
 
-    // [수정] build가 실행될 때마다(상태 변경 시) 동기화 함수 호출
+    // build가 실행될 때마다(상태 변경 시) 동기화 함수 호출
     _syncControllerWithScene(scene);
 
     if (!isConnected) {

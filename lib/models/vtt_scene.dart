@@ -89,12 +89,15 @@ class VttScene {
       'imageScale': imageScale,
       'imageX': imageX,
       'imageY': imageY,
+      'width': localWidth,
+      'height': localHeight,
     };
   }
 
   /// 새 맵 생성(CreateVttMapDto)을 위한 JSON
   Map<String, dynamic> toCreateJson() {
     return {
+      'roomId': roomId,
       'name': name,
       'imageUrl': backgroundUrl,
       'gridType': gridType,
@@ -103,6 +106,8 @@ class VttScene {
       'imageScale': imageScale,
       'imageX': imageX,
       'imageY': imageY,
+      'width': localWidth,
+      'height': localHeight,
     };
   }
 

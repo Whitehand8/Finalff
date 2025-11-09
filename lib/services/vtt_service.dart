@@ -64,12 +64,15 @@ class VttService {
 
   /// 새로운 맵(씬) 생성하기
   /// [API] POST /vttmaps/rooms/:roomId/vttmaps
-  Future<VttScene> createVttMap(String roomId, String name) async { // <-- 1. Map -> String name으로 변경
-    // [수정됨] 백엔드 vttmap.controller.ts의 경로와 일치하도록 수정
-    final String path = '$_vttMapPath/rooms/$roomId/vttmaps'; // <-- 2. /vttmaps 접두사 추가
+  // --- [수정됨] ---
+  // 'name'만 받는 대신, VttScene.toCreateJson()이 생성한 Map 데이터를 받도록 변경
+  // (이 데이터에는 name, width, height 등이 모두 포함되어 있어야 함)
+  Future<VttScene> createVttMap(String roomId, Map<String, dynamic> createData) async {
+    final String path = '$_vttMapPath/rooms/$roomId/vttmaps';
     
-    // 백엔드의 CreateVttMapDto와 일치해야 함
-    final Map<String, dynamic> body = {'name': name}; // <-- 3. body가 name을 사용하도록 수정
+    // [수정됨] body가 파라미터로 받은 createData를 사용하도록 수정
+    final Map<String, dynamic> body = createData; 
+    // --- [수정 끝] ---
     
     try {
       final res = await _apiClient.dio.post(
