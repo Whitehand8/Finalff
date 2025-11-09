@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:trpg_frontend/models/token.dart';
 import 'package:trpg_frontend/models/vtt_scene.dart';
 import 'package:trpg_frontend/services/vtt_socket_service.dart';
-// [신규] 토큰 크기 변경 API를 호출하기 위해 TokenService import
 import 'package:trpg_frontend/services/token_service.dart'; 
 
 class VttCanvas extends StatefulWidget {
@@ -21,50 +20,121 @@ class _VttCanvasState extends State<VttCanvas> {
   static const double _defaultCanvasWidth = 2000.0;
   static const double _defaultCanvasHeight = 2000.0;
 
+  static final Matrix4 _defaultCenterMatrix = Matrix4.identity()
+      ..translate(-_defaultCanvasWidth / 4, -_defaultCanvasHeight / 4);
+
+  // 현재 씬 ID를 추적
+  String? _currentSceneId;
+  bool _isInteracting = false; 
+
   @override
   void initState() {
     super.initState();
-    _transformationController = TransformationController();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        final scene = context.read<VttSocketService>().scene;
-        if (scene != null) {
-          _updateControllerFromScene(scene);
-        } else {
-          _transformationController.value = Matrix4.identity()
-            ..translate(-_defaultCanvasWidth / 4, -_defaultCanvasHeight / 4);
-        }
-      }
-    });
+    _transformationController = TransformationController(_defaultCenterMatrix);
+    final initialScene = context.read<VttSocketService>().scene;
+    _currentSceneId = initialScene?.id;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final scene = context.watch<VttSocketService>().scene;
-    if (scene != null) {
-      _updateControllerFromScene(scene);
-    }
   }
 
-  void _updateControllerFromScene(VttScene scene) {
-    _transformationController.value = Matrix4.identity()
-      ..translate(scene.imageX, scene.imageY)
-      ..scale(scene.imageScale);
+  /// [수정] 맵/씬의 상태 변화에 따라 컨트롤러를 동기화하는 로직
+  void _syncControllerWithScene(VttScene? scene) {
+    // 1. 사용자가 캔버스를 조작 중(드래그/줌)일 때는 덮어쓰기 방지
+    if (_isInteracting) return;
+
+    Matrix4 targetMatrix; // 이 빌드에서 컨트롤러가 가져야 할 목표 매트릭스
+
+    // bool isSceneSaved = scene != null &&
+    //     (scene.imageX != 0.0 || scene.imageY != 0.0 || scene.imageScale != 1.0);
+    
+    // [신규] 씬에 저장된 위치/축척 값이 있는지 확인
+    final bool isSceneSaved = scene != null &&
+        (scene.imageX.abs() > 0.001 || // 0.0과 정확히 비교하지 않음
+         scene.imageY.abs() > 0.001 ||
+         (scene.imageScale - 1.0).abs() > 0.001);
+
+
+    if (scene == null) {
+      // 2. 씬이 없음 (맵에서 나감) -> 무조건 중앙으로
+      targetMatrix = _defaultCenterMatrix;
+    } else {
+      // 3. 씬이 있음
+      if (isSceneSaved) {
+        // 3a. '저장된 씬'(0,0,1 아님) -> 씬의 위치/축척으로 설정
+        targetMatrix = Matrix4.identity()
+          ..translate(scene.imageX, scene.imageY)
+          ..scale(scene.imageScale);
+      } else {
+        // 3b. '새 씬'(0,0,1)이 로드됨
+        // [핵심] 맵이 방금 바뀐 경우(_currentSceneId != scene.id)에만 중앙으로 리셋.
+        // 이미 이 맵에 있는데(ID가 같음) 씬 정보가 (0,0,1)로 왔다면,
+        // (예: 토큰 이동) 컨트롤러를 덮어쓰면 안 됨 (사용자 조작 보존).
+        if (_currentSceneId != scene.id) {
+          // 맵이 '새 맵'으로 방금 변경됨 -> 중앙으로
+          targetMatrix = _defaultCenterMatrix;
+        } else {
+          // 이미 '새 맵'에 머무는 중 -> 컨트롤러 덮어쓰기 중지 (사용자 조작 허용)
+          // [수정] 씬 ID가 같으면 현재 씬 ID를 업데이트할 필요 없음
+          _currentSceneId = scene.id; // 이 라인은 사실상 불필요하나, 안정성을 위해 유지
+          return; 
+        }
+      }
+    }
+
+    // 4. 씬 ID 업데이트 (맵이 변경된 경우에만)
+    if (_currentSceneId != scene?.id) {
+      _currentSceneId = scene?.id;
+    }
+
+    // 5. 계산된 목표(targetMatrix)와 현재 컨트롤러 값이 다를 때만 안전하게 업데이트
+    _updateControllerValue(targetMatrix);
+  }
+
+
+  /// [신규] 빌드 사이클과 충돌하지 않도록 안전하게 컨트롤러 값을 업데이트
+  void _updateControllerValue(Matrix4 targetMatrix) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // [수정] 소수점 정밀도 문제로 인한 무한 루프 방지를 위해 toString() 비교
+      if (mounted && _transformationController.value.toString() != targetMatrix.toString()) {
+        _transformationController.value = targetMatrix;
+      }
+    });
+  }
+
+  void _onInteractionStart(ScaleStartDetails details) {
+    setState(() {
+      _isInteracting = true;
+    });
   }
 
   void _onInteractionEnd(ScaleEndDetails details, VttSocketService vttSocket) {
+    setState(() {
+      _isInteracting = false;
+    });
+
     final matrix = _transformationController.value;
     final double newScale = matrix.row0[0];
     final double newX = matrix.getTranslation().x;
     final double newY = matrix.getTranslation().y;
 
     final currentScene = vttSocket.scene;
-    
     if (currentScene == null) return;
 
-    // [수정] vtt_scene.dart에 추가된 copyWith 사용
+    // [신규] 맵이 (0,0,1) 상태일 때 사용자가 움직인 경우,
+    // (0,0,1)로 다시 되돌아가는 것을 막기 위해 값 보정
+    final bool isSceneDefault = (currentScene.imageX.abs() < 0.001 &&
+                                 currentScene.imageY.abs() < 0.001 &&
+                                 (currentScene.imageScale - 1.0).abs() < 0.001);
+                                 
+    // 맵이 기본값(0,0,1)이고 사용자 조작도 (0,0,1)과 비슷하면 전송 안 함
+    if (isSceneDefault && 
+        (newX.abs() < 0.001 && newY.abs() < 0.001 && (newScale - 1.0).abs() < 0.001)) {
+      return;
+    }
+
     final updatedScene = currentScene.copyWith(
       imageScale: newScale,
       imageX: newX,
@@ -72,7 +142,6 @@ class _VttCanvasState extends State<VttCanvas> {
     );
     
     vttSocket.sendMapUpdate(updatedScene);
-
     debugPrint('Interaction End: Scale=$newScale, X=$newX, Y=$newY');
   }
 
@@ -83,11 +152,13 @@ class _VttCanvasState extends State<VttCanvas> {
     final tokens = vttSocket.tokens.values.toList();
     final isConnected = vttSocket.isConnected;
 
+    // [수정] build가 실행될 때마다(상태 변경 시) 동기화 함수 호출
+    _syncControllerWithScene(scene);
+
     if (!isConnected) {
       return const Center(child: Text('VTT 서버에 연결 중...'));
     }
 
-    // [수정] vtt_scene.dart에 추가된 copyWith 사용
     final VttScene effectiveScene = scene ?? VttScene(
       id: 'default_empty_canvas',
       roomId: vttSocket.roomId,
@@ -113,6 +184,7 @@ class _VttCanvasState extends State<VttCanvas> {
 
     return InteractiveViewer(
       transformationController: _transformationController,
+      onInteractionStart: _onInteractionStart,
       onInteractionEnd: (scene != null)
           ? (details) => _onInteractionEnd(details, vttSocket)
           : null,
@@ -159,20 +231,15 @@ class _VttCanvasState extends State<VttCanvas> {
                 onPositionChanged: (newX, newY) {
                   vttSocket.moveToken(token.id, newX, newY);
                 },
-                // [신규] (기능 2) 크기 변경 콜백
                 onSizeChanged: (newWidth, newHeight) {
                   debugPrint('[Canvas] Token ${token.id} size changed: $newWidth x $newHeight');
-                  // TokenService를 통해 API 호출 (Optimistic Update는 아님)
                   TokenService.instance.updateToken(
                     token.id,
                     width: newWidth,
                     height: newHeight,
                   ).catchError((e) {
                      debugPrint('[Canvas] Token size update error: $e');
-                     // (선택) 여기서 에러 스낵바 표시
                   });
-                  // 백엔드가 'token:updated' 이벤트를 보내면
-                  // vttSocket이 상태를 갱신하여 UI에 반영됨
                 },
               ),
             ),
