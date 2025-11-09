@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../systems/core/registry.dart';
-import '../../systems/core/rules_engine.dart';
-import '../../systems/coc7e/widgets/coc7e_sheet.dart';
-import '../../systems/dnd5e/widgets/dnd5e_sheet.dart';
+import 'package:trpg_frontend/systems/core/registry.dart';
+import 'package:trpg_frontend/systems/core/rules_engine.dart';
+import 'package:trpg_frontend/systems/coc7e/widgets/coc7e_sheet.dart';
+import 'package:trpg_frontend/systems/dnd5e/widgets/dnd5e_sheet.dart';
 
 class CharacterSheetRouter extends StatelessWidget {
   final String systemId;
