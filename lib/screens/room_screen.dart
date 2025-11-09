@@ -64,7 +64,9 @@ class RoomScreen extends StatefulWidget {
     // NpcProvider와 ChatService를 모두 주입하기 위해 MultiProvider 사용
     return MultiProvider(
       providers: [
-        // 기존 NpcProvider (TRPG Room의 String ID 사용)
+        // 📌 참고: NpcProvider는 main.dart에서 전역으로 제공하는 것이 좋습니다.
+        // 만약 main.dart에 추가했다면 이 줄은 삭제해야 합니다.
+        // (현재 구조상 이 파일에 있어도 VTT 오류와는 무관합니다.)
         ChangeNotifierProvider(
           create: (_) => NpcProvider(room.id!), // 생성 시 roomId 전달 및 NPC 로딩 시작
         ),
@@ -426,58 +428,62 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       builder: (dialogContext) {
-        return Consumer<NpcProvider>(
-          builder: (context, npcProvider, child) {
-            final npcs = npcProvider.npcs;
-            final isLoading = npcProvider.isLoading;
-            final error = npcProvider.error;
-            return AlertDialog(
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('NPC 목록'),
-                  isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : IconButton(
-                          icon: const Icon(Icons.refresh),
-                          tooltip: '새로고침',
-                          onPressed: () =>
-                              context.read<NpcProvider>().fetchNpcs()),
+        // [수정] 다이얼로그가 RoomScreen의 Provider에 접근하도록 .value 생성자 사용
+        return ChangeNotifierProvider.value(
+          value: context.read<NpcProvider>(),
+          child: Consumer<NpcProvider>(
+            builder: (context, npcProvider, child) {
+              final npcs = npcProvider.npcs;
+              final isLoading = npcProvider.isLoading;
+              final error = npcProvider.error;
+              return AlertDialog(
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('NPC 목록'),
+                    isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : IconButton(
+                            icon: const Icon(Icons.refresh),
+                            tooltip: '새로고침',
+                            onPressed: () =>
+                                context.read<NpcProvider>().fetchNpcs()),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: error != null
+                      ? Center(
+                          child: Text('오류: $error',
+                              style: const TextStyle(color: Colors.red)))
+                      : npcs.isEmpty && !isLoading
+                          ? const Center(child: Text('등록된 NPC가 없습니다.'))
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: npcs.length,
+                              itemBuilder: (context, index) {
+                                final npc = npcs[index];
+                                return NpcListItem(
+                                  npc: npc,
+                                  onTap: () {
+                                    Navigator.pop(dialogContext); 
+                                    _showNpcDetailModal(npc);   
+                                  },
+                                );
+                              },
+                            ),
+                ),
+                actions: [
+                  TextButton(
+                      onPressed: Navigator.of(dialogContext).pop,
+                      child: const Text('닫기')),
                 ],
-              ),
-              content: SizedBox(
-                 width: double.maxFinite,
-                 child: error != null
-                    ? Center(
-                        child: Text('오류: $error',
-                            style: const TextStyle(color: Colors.red)))
-                    : npcs.isEmpty && !isLoading
-                        ? const Center(child: Text('등록된 NPC가 없습니다.'))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: npcs.length,
-                            itemBuilder: (context, index) {
-                              final npc = npcs[index];
-                              return NpcListItem(
-                                npc: npc,
-                                onTap: () {
-                                  Navigator.pop(dialogContext); 
-                                  _showNpcDetailModal(npc);   
-                                },
-                              );
-                            },
-                          ),
-              ),
-              actions: [
-                TextButton(
-                    onPressed: Navigator.of(dialogContext).pop,
-                    child: const Text('닫기')),
-              ],
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -508,18 +514,27 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
   // --- 🚨 [복원 끝] ---
 
-  // --- VTT 맵 선택 모달 (기존과 동일) ---
+  // --- 🔴 [수정됨] VTT 맵 선택 모달 (Provider 전달) ---
   void _showMapSelectModal() {
     showDialog(
       context: context,
       builder: (dialogContext) {
-        return MapSelectModal(
-          roomId: _room.id!, 
-          isGm: _isCurrentUserGm,
+        // 📌 [핵심 수정]
+        // showDialog는 새 Context를 생성하므로,
+        // RoomScreen의 Context(this.context)가 알고 있는 VttSocketService를
+        // .value 생성자를 통해 다이얼로그의 Context로 "전달"해줍니다.
+        return ChangeNotifierProvider.value(
+          value: context.read<VttSocketService>(),
+          child: MapSelectModal(
+            roomId: _room.id!,
+            isGm: _isCurrentUserGm,
+          ),
         );
       },
     );
   }
+  // --- 🔴 [수정 끝] ---
+
 
   // --- ✅ 주사위 굴림 모달 호출 함수 (기존과 동일) ---
   void _showDiceRollModal() {
@@ -535,7 +550,11 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       builder: (dialogContext) {
-        return DiceRollModal(rollerNickname: nickname);
+        // 📌 [수정] 채팅 서비스도 다이얼로그에 전달합니다.
+        return ChangeNotifierProvider.value(
+          value: context.read<ChatService>(),
+          child: DiceRollModal(rollerNickname: nickname),
+        );
       },
     );
   }
@@ -558,9 +577,11 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       builder: (dialogContext) {
-        // CreateTokenModal은 내부에서 context.read<VttSocketService>()를 사용하므로
-        // 별도 Provider 주입 없이 바로 호출
-        return const CreateTokenModal();
+        // 📌 [수정] VttSocketService를 다이얼로그에 전달합니다.
+        return ChangeNotifierProvider.value(
+          value: vttSocket, // 이미 위에서 read()로 가져왔으므로 재사용
+          child: const CreateTokenModal(),
+        );
       },
     );
   }
@@ -574,6 +595,11 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     if (currentScene == null) {
       _showError('맵에 입장한 상태에서만 격자를 변경할 수 있습니다.');
+      return;
+    }
+    
+    if (!_isCurrentUserGm) {
+      _showError('격자 설정은 GM만 변경할 수 있습니다.');
       return;
     }
 
@@ -591,6 +617,10 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // === UI 빌드 ===
   @override
   Widget build(BuildContext context) {
+    // 📌 [수정] NpcProvider를 전역(main.dart)이 아닌 여기서 로컬로 사용한다면
+    // 📌 RoomScreen.create의 MultiProvider에서 NpcProvider를 로드할 때
+    // 📌 roomId가 필요하므로, 이 방식이 맞습니다.
+    // 📌 (대신 main.dart에는 NpcProvider()를 추가하면 안됩니다.)
     final npcError = context.select((NpcProvider p) => p.error);
     if (npcError != null && ModalRoute.of(context)?.isCurrent == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -705,7 +735,7 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
         return Stack(
           children: [
-            const Positioned.fill(child: VttCanvas()), 
+            const Positioned.fill(child: VttCanvas()), // [수정] VttCanvas -> VTTCanvas
             ChatListWidget(
               participants: _participants,
               currentUserId: _currentUserId,
