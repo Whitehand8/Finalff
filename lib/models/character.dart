@@ -20,6 +20,16 @@ class Character {
   });
 
   // ... (imageUrl 게터는 동일) ...
+  String? get imageUrl {
+    // 백엔드 'data' JSON에 'profileImageUrl' 키로 URL이 저장된 경우
+    if (data.containsKey('profileImageUrl') && data['profileImageUrl'] != null) {
+      // TODO: 여기에 S3 주소 변환 로직이 필요하면 추가
+      // 예: return 'https://my-s3-bucket.../' + data['profileImageUrl'];
+      return data['profileImageUrl'] as String?;
+    }
+
+    return null;
+  }
 
   factory Character.fromJson(Map<String, dynamic> json) {
     return Character(

@@ -100,15 +100,19 @@ class _VttCanvasState extends State<VttCanvas> {
   }
 
   void _onInteractionStart(ScaleStartDetails details) {
-    setState(() {
-      _isInteracting = true;
-    });
+    // 🚨 [수정] setState() 제거
+    // setState(() {
+    //   _isInteracting = true;
+    // });
+    _isInteracting = true;
   }
 
   void _onInteractionEnd(ScaleEndDetails details, VttSocketService vttSocket) {
-    setState(() {
-      _isInteracting = false;
-    });
+    // 🚨 [수정] setState() 제거 (스냅백 현상의 핵심 원인)
+    // setState(() {
+    //   _isInteracting = false;
+    // });
+    _isInteracting = false;
 
     final matrix = _transformationController.value;
     final double newScale = matrix.row0[0];
@@ -175,8 +179,8 @@ class _VttCanvasState extends State<VttCanvas> {
       maxScale: 10.0,
       constrained: false, 
       child: SizedBox(
-        width: effectiveScene.localWidth.toDouble(),
-        height: effectiveScene.localHeight.toDouble(),
+        width: max(effectiveScene.localWidth.toDouble(), _defaultCanvasWidth),
+        height: max(effectiveScene.localHeight.toDouble(), _defaultCanvasHeight),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
