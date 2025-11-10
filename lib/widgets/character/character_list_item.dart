@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:trpg_frontend/models/character.dart';
 import 'package:trpg_frontend/providers/room_data_provider.dart';
+import 'package:trpg_frontend/models/participant.dart';
 
 class CharacterListItem extends StatelessWidget {
   final Character character;
@@ -21,7 +22,7 @@ class CharacterListItem extends StatelessWidget {
         // character.ownerId는 User ID입니다.
         // Participant.userId와 일치하는 Participant를 찾아 그 이름을 반환합니다.
         final ownerParticipant = provider.participants.firstWhere(
-          (p) => p.userId == character.ownerId,
+          (p) => p.user.id == character.ownerId,
         );
         return ownerParticipant.name;
       } catch (e) {
@@ -32,9 +33,8 @@ class CharacterListItem extends StatelessWidget {
 
     // character.dart 모델에 name, age Getter가 있다고 가정합니다.
     // (이전 단계에서 추가하기로 계획했습니다.)
-    final characterName = character.name;
-    final characterAge = character.age;
-
+    final characterName = character.data['name']?.toString() ?? '이름 없음';
+    final characterAge = character.data['age']?.toString() ?? '';
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
       child: ListTile(

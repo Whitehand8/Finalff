@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/room_data_provider.dart';
-import '../../models/participant.dart';
-import '../../models/character.dart';
+import 'package:trpg_frontend/providers/room_data_provider.dart';
+import 'package:trpg_frontend/models/participant.dart';
+import 'package:trpg_frontend/models/character.dart';
+import 'package:trpg_frontend/widgets/character/character_list_item.dart';
+import 'package:trpg_frontend/widgets/character_sheet/character_sheet_editor_modal.dart';
 
-// -------------------------------------------------------------------
-// ⚠️ TODO: 아래 두 파일은 다음 단계에서 생성할 예정입니다.
-// import '../character/character_list_item.dart';
-// import '../../features/character_sheet/character_sheet_editor_modal.dart';
-// -------------------------------------------------------------------
 
 class ParticipantCharacterPanel extends StatelessWidget {
   const ParticipantCharacterPanel({super.key});
@@ -180,7 +177,7 @@ class ParticipantCharacterPanel extends StatelessWidget {
            padding: EdgeInsets.only(
                bottom: MediaQuery.of(ctx).viewInsets.bottom),
            child: CharacterSheetEditorModal(
-             mode: mode,
+             mode: SheetEditorMode.create,
              systemId: systemId,
              character: character, // 수정 시 전달
              participantId: character?.participantId ??
