@@ -1,4 +1,3 @@
-// lib/widgets/chat/chat_list_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:trpg_frontend/models/participant.dart';
@@ -34,7 +33,14 @@ class _ChatListWidgetState extends State<ChatListWidget> {
     final sender = widget.participants.firstWhere(
       (p) => p.id == senderId,
       // 만약 참여자 목록에 없는 ID라면 (예: 방을 나간 유저) '알 수 없음'을 반환합니다.
-      orElse: () => Participant(id: 0, nickname: '알 수 없음', name: '', role: 'PLAYER'),
+      // ▼▼▼ [수정됨] userId: 0 추가 ▼▼▼
+      orElse: () => Participant(
+          id: 0,
+          userId: 0, // 👈 [수정] userId 필드 추가
+          nickname: '알 수 없음',
+          name: '',
+          role: 'PLAYER'),
+      // ▲▲▲ [수정 완료] ▲▲▲
     );
     return sender.nickname;
   }

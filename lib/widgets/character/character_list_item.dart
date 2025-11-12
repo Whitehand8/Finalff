@@ -21,9 +21,13 @@ class CharacterListItem extends StatelessWidget {
       try {
         // character.ownerId는 User ID입니다.
         // Participant.userId와 일치하는 Participant를 찾아 그 이름을 반환합니다.
+        
+        // ▼▼▼ [수정됨] p.id -> p.userId ▼▼▼
         final ownerParticipant = provider.participants.firstWhere(
-          (Participant p) => p.id == character.ownerId,
+          (Participant p) => p.userId == character.ownerId, // 👈 [수정] p.id를 p.userId로 변경
         );
+        // ▲▲▲ [수정 완료] ▲▲▲
+
         return ownerParticipant.name;
       } catch (e) {
         // 참여자를 찾을 수 없는 경우 (예: 데이터 동기화 문제)

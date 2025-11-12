@@ -42,7 +42,7 @@ class ApiClient {
 
   Dio get dio => _dio;
 
-  Future<Map<String, String>> getPresignedUrl(String fileName, String fileType) async {
+  Future<Map<String, String>> getPresignedUrl(String fileName, String contentType) async {
     try {
       // 🚨 중요: 이 요청은 ApiClient의 인증 인터셉터(_AuthQueuedInterceptor)를
       // 통과해야 하므로, _dio 인스턴스를 사용하는 것이 맞습니다.
@@ -50,7 +50,7 @@ class ApiClient {
         '/s3/presigned-url',
         data: {
           'fileName': fileName,
-          'fileType': fileType,
+          'contentType': contentType,
         },
       );
 
@@ -58,7 +58,7 @@ class ApiClient {
         // 백엔드가 'presignedUrl'과 'fileUrl'을 반환한다고 가정
         return {
           'presignedUrl': response.data['presignedUrl'] as String,
-          'fileUrl': response.data['fileUrl'] as String,
+          'fileUrl': response.data['publicUrl'] as String,
         };
       } else {
         throw Exception('Presigned URL 생성 실패');

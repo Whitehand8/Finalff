@@ -1,4 +1,3 @@
-// screens/create_room_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,12 +34,14 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // ▼▼▼ [수정됨] 'system:' -> 'trpgType:' ▼▼▼
       final newRoom = Room(
         name: _roomName,
         password: _password,
         maxParticipants: _capacity,
-        system: _selectedSystem,
+        trpgType: _selectedSystem, // 'system:'에서 'trpgType:'으로 변경
       );
+      // ▲▲▲ [수정 완료] ▲▲▲
 
       final created = await RoomService.createRoom(newRoom);
 

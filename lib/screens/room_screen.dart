@@ -33,11 +33,16 @@ import 'package:trpg_frontend/widgets/vtt/create_token_modal.dart';
 import 'package:trpg_frontend/widgets/dice/dice_roll_modal.dart';
 // --- ✅ ---
 
+// ▼▼▼ [수정 1] Provider 및 Panel 임포트 추가 ▼▼▼
+import 'package:trpg_frontend/providers/room_data_provider.dart';
+import 'package:trpg_frontend/widgets/room/participant_character_panel.dart';
+// ▲▲▲ [수정 1 끝] ▲▲▲
+
 class RoomScreen extends StatefulWidget {
   final Room room;
   const RoomScreen({super.key, required this.room});
 
-  // --- Provider 제공 (기존과 동일) ---
+  // --- Provider 제공 (수정됨) ---
   static Widget create({required Room room}) {
     if (room.id == null) {
       return const Scaffold(
@@ -64,25 +69,27 @@ class RoomScreen extends StatefulWidget {
     // NpcProvider와 ChatService를 모두 주입하기 위해 MultiProvider 사용
     return MultiProvider(
       providers: [
-        // 📌 참고: NpcProvider는 main.dart에서 전역으로 제공하는 것이 좋습니다.
-        // 만약 main.dart에 추가했다면 이 줄은 삭제해야 합니다.
-        // (현재 구조상 이 파일에 있어도 VTT 오류와는 무관합니다.)
         ChangeNotifierProvider(
           create: (_) => NpcProvider(room.id!), // 생성 시 roomId 전달 및 NPC 로딩 시작
         ),
-        // 새로 추가된 ChatService Provider
         ChangeNotifierProvider(
           create: (_) => ChatService(room.chatRoomId!), // 채팅방의 숫자 ID 전달
         ),
-        // VttSocketService 주입 (TRPG Room의 String ID 사용)
         ChangeNotifierProvider(
-      create: (_) => VttSocketService(
-        roomId: room.id!, 
-        onRoomEvent: (eventName, data) {
-          debugPrint('[VTT Room Event] $eventName: $data');
-        },
-      ),
-    ),
+          create: (_) => VttSocketService(
+            roomId: room.id!, 
+            onRoomEvent: (eventName, data) {
+              debugPrint('[VTT Room Event] $eventName: $data');
+            },
+          ),
+        ),
+        // ▼▼▼ [수정 2] RoomDataProvider 주입 (사용자가 이미 적용함) ▼▼▼
+        ChangeNotifierProvider(
+          create: (context) {
+            return RoomDataProvider();
+          },
+        ),
+        // ▲▲▲ [수정 2 끝] ▲▲▲
       ],
       child: RoomScreen(room: room),
     );
@@ -116,8 +123,8 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _chatController = TextEditingController();
   late Room _room;
-  List<Participant> _participants = [];
-  bool _isParticipantsLoading = false;
+  // List<Participant> _participants = []; // <-- [수정 3] Provider가 관리하므로 삭제
+  // bool _isParticipantsLoading = false; // <-- [수정 4] Provider가 관리하므로 삭제
 
   bool _isCurrentUserGm = false;
   int? _currentUserId; 
@@ -130,7 +137,7 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _initializeScreen(); 
   }
 
-  // --- ✨ 초기화 함수 (VTT 연결 코드 추가) ---
+  // --- ✨ 초기화 함수 (수정됨) ---
   Future<void> _initializeScreen() async {
     // VTT 소켓 자동 연결
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -141,7 +148,24 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     });
 
     await _loadCurrentUserId(); // AuthService에서 사용자 ID 가져오기
-    await _loadParticipants(); // 참여자 목록 로드 (내부에서 _checkCurrentUserRole 호출)
+    
+    // ▼▼▼ [수정 5] Provider로 데이터 로드 (사용자가 이미 적용함) ▼▼▼
+    if (mounted && _currentUserId != null) {
+      // Room 모델에 trpgType 필드가 있다고 가정합니다.
+      // 만약 Room 모델에 trpgType이 없다면 _room.trpgType 대신 "coc7e" 등 룰 ID 문자열을 직접 전달해야 합니다.
+      await context.read<RoomDataProvider>().fetchData(
+            roomId: _room.id!,
+            myUserId: _currentUserId!,
+            systemId: _room.trpgType, // 👈 _room.trpgType 사용
+          );
+      
+      if (mounted) {
+        setState(() {
+          _isCurrentUserGm = context.read<RoomDataProvider>().isGM;
+        });
+      }
+    }
+    // ▲▲▲ [수정 5 끝] ▲▲▲
   }
 
   // --- ✨ 현재 사용자 ID 로드 함수 (기존과 동일) ---
@@ -167,7 +191,17 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _validateRoomStillExists();
       context.read<NpcProvider>().fetchNpcs();
-      _loadParticipants(); 
+      
+      // ▼▼▼ [수정 6] _loadParticipants() 대신 Provider.fetchData() 호출 ▼▼▼
+      // _loadParticipants(); 
+      if (mounted && _currentUserId != null) {
+         context.read<RoomDataProvider>().fetchData(
+              roomId: _room.id!,
+              myUserId: _currentUserId!,
+              systemId: _room.trpgType,
+            );
+      }
+      // ▲▲▲ [수정 6 끝] ▲▲▲
       
       context.read<VttSocketService>().connect(); // VTT 연결 재시도
     }
@@ -187,45 +221,24 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  // 참여자 목록 로드 및 역할 확인 (기존과 동일)
+  // ▼▼▼ [수정 7] _loadParticipants() 메서드 전체 삭제 ▼▼▼
+  /*
   Future<void> _loadParticipants() async {
-    if (_room.id == null) return;
-    if (!mounted) return;
-    setState(() => _isParticipantsLoading = true);
-    try {
-      final participants = await RoomService.getParticipants(_room.id!);
-      if (mounted) {
-        setState(() => _participants = participants);
-        _checkCurrentUserRole(); // ✨ 참여자 로드 후 역할 확인
-      }
-    } catch (e) {
-      if (mounted) _showError('참여자 목록 로딩 실패: $e');
-    } finally {
-      if (mounted) setState(() => _isParticipantsLoading = false);
-    }
+    // ... (이 메서드 전체 삭제) ...
   }
+  */
+  // ▲▲▲ [수정 7 끝] ▲▲▲
 
-  // --- ✨ 현재 사용자 역할 확인 로직 (기존과 동일) ---
+  // ▼▼▼ [수정 8] _checkCurrentUserRole() 메서드 전체 삭제 ▼▼▼
+  /*
   void _checkCurrentUserRole() {
-    if (_currentUserId != null && _participants.isNotEmpty) {
-      final currentUserParticipant = _participants.firstWhere(
-        (p) => p.id == _currentUserId,
-        orElse: () => Participant(id: 0, nickname: '', name: '', role: 'PLAYER'),
-      );
-      final isGm = currentUserParticipant.role == 'GM';
-      if (mounted && _isCurrentUserGm != isGm) {
-        setState(() {
-          _isCurrentUserGm = isGm;
-        });
-      }
-    } else if (mounted && _isCurrentUserGm != false) {
-      setState(() {
-        _isCurrentUserGm = false;
-      });
-    }
+    // ... (이 메서드 전체 삭제) ...
   }
+  */
+  // ▲▲▲ [수정 8 끝] ▲▲▲
 
-  // --- 🚨 [복원됨] 방 관리 함수들 ---
+
+  // --- 🚨 [복원됨] 방 관리 함수들 (수정됨) ---
   Future<void> _leaveRoom() async {
     if (_room.creatorId == _currentUserId) {
       _showCannotLeaveAsCreatorDialog();
@@ -315,7 +328,19 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
        if (!mounted) return;
        _showSuccess('방장이 위임되었습니다.');
        _validateRoomStillExists(); 
-       _loadParticipants();
+       
+       // ▼▼▼ [수정 9] _loadParticipants() 대신 Provider.fetchData() 호출 ▼▼▼
+       if (mounted && _currentUserId != null) {
+         await context.read<RoomDataProvider>().fetchData(
+              roomId: _room.id!,
+              myUserId: _currentUserId!,
+              systemId: _room.trpgType,
+            );
+          if (mounted) {
+            setState(() { _isCurrentUserGm = context.read<RoomDataProvider>().isGM; });
+          }
+       }
+       // ▲▲▲ [수정 9 끝] ▲▲▲
      } on RoomServiceException catch (e) {
        if (!mounted) return;
        _showError('방장 위임 실패: ${e.message}');
@@ -361,7 +386,19 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           participantId.toString(), newRole); 
       if (!mounted) return;
       _showSuccess('역할이 변경되었습니다.');
-      _loadParticipants(); 
+      
+      // ▼▼▼ [수정 10] _loadParticipants() 대신 Provider.fetchData() 호출 ▼▼▼
+      if (mounted && _currentUserId != null) {
+         await context.read<RoomDataProvider>().fetchData(
+              roomId: _room.id!,
+              myUserId: _currentUserId!,
+              systemId: _room.trpgType,
+            );
+          if (mounted) {
+            setState(() { _isCurrentUserGm = context.read<RoomDataProvider>().isGM; });
+          }
+       }
+      // ▲▲▲ [수정 10 끝] ▲▲▲
     } on RoomServiceException catch (e) {
       if (!mounted) return;
       _showError('역할 변경 실패: ${e.message}');
@@ -519,10 +556,6 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     showDialog(
       context: context,
       builder: (dialogContext) {
-        // 📌 [핵심 수정]
-        // showDialog는 새 Context를 생성하므로,
-        // RoomScreen의 Context(this.context)가 알고 있는 VttSocketService를
-        // .value 생성자를 통해 다이얼로그의 Context로 "전달"해줍니다.
         return ChangeNotifierProvider.value(
           value: context.read<VttSocketService>(),
           child: MapSelectModal(
@@ -536,16 +569,16 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // --- 🔴 [수정 끝] ---
 
 
-  // --- ✅ 주사위 굴림 모달 호출 함수 (기존과 동일) ---
+  // --- ✅ 주사위 굴림 모달 호출 함수 (수정됨) ---
   void _showDiceRollModal() {
-    String nickname = '참여자'; 
-    if (_currentUserId != null) {
-      final me = _participants.firstWhere(
-        (p) => p.id == _currentUserId,
-        orElse: () => Participant(id: 0, nickname: '알 수 없음', name: '', role: 'PLAYER'),
-      );
-      nickname = me.nickname;
+    String nickname = '참여자';
+    
+    // ▼▼▼ [수정 11] Provider에서 '내 참여자 정보'를 가져와서 사용 ▼▼▼
+    final myParticipant = context.read<RoomDataProvider>().myParticipant;
+    if (myParticipant != null) {
+      nickname = myParticipant.nickname;
     }
+    // ▲▲▲ [수정 11 끝] ▲▲▲
 
     showDialog(
       context: context,
@@ -617,10 +650,6 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // === UI 빌드 ===
   @override
   Widget build(BuildContext context) {
-    // 📌 [수정] NpcProvider를 전역(main.dart)이 아닌 여기서 로컬로 사용한다면
-    // 📌 RoomScreen.create의 MultiProvider에서 NpcProvider를 로드할 때
-    // 📌 roomId가 필요하므로, 이 방식이 맞습니다.
-    // 📌 (대신 main.dart에는 NpcProvider()를 추가하면 안됩니다.)
     final npcError = context.select((NpcProvider p) => p.error);
     if (npcError != null && ModalRoute.of(context)?.isCurrent == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -629,9 +658,7 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       });
     }
 
-    // --- 🚨 [신규] (기능 3) 격자 아이콘을 동적으로 변경하기 위해 scene을 watch ---
     final bool isGridVisible = context.watch<VttSocketService>().scene?.showGrid ?? true;
-    // --- 🚨 [신규 끝] ---
 
     return Scaffold(
       key: _scaffoldKey,
@@ -736,15 +763,22 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         return Stack(
           children: [
             const Positioned.fill(child: VttCanvas()), // [수정] VttCanvas -> VTTCanvas
-            ChatListWidget(
-              participants: _participants,
-              currentUserId: _currentUserId,
+            
+            // ▼▼▼ [수정 12] Consumer로 Provider의 participants를 ChatListWidget에 전달 ▼▼▼
+            Consumer<RoomDataProvider>(
+              builder: (context, roomData, child) {
+                return ChatListWidget(
+                  participants: roomData.participants,
+                  currentUserId: _currentUserId,
+                );
+              }
             ),
+            // ▲▲▲ [수정 12 끝] ▲▲▲
           ],
         );
       }),
       
-      // --- 🚨 [복원됨] 참여자 Drawer ---
+      // --- 🚨 참여자 Drawer (수정됨) ---
       endDrawer: Drawer(
         child: Column(
           children: [
@@ -752,57 +786,45 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 title: const Text('참여자'), automaticallyImplyLeading: false, 
                 backgroundColor: const Color(0xFF8C7853)
             ),
-            ListTile(
-              title: const Text('참여자 목록'),
-              trailing: _isParticipantsLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : IconButton(
-                      icon: const Icon(Icons.refresh),
-                      tooltip: '새로고침',
-                      onPressed: _loadParticipants),
+            
+            // ▼▼▼ [수정 13] ListTile을 Consumer로 감싸서 Provider와 연동 ▼▼▼
+            Consumer<RoomDataProvider>(
+              builder: (context, provider, child) {
+                return ListTile(
+                  title: const Text('참여자 및 시트'), // <-- 제목 수정
+                  trailing: provider.isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(
+                          icon: const Icon(Icons.refresh),
+                          tooltip: '새로고침',
+                          onPressed: () {
+                            if (_currentUserId != null) {
+                              // Provider를 통해 데이터 새로고침
+                              provider.fetchData(
+                                roomId: _room.id!,
+                                myUserId: _currentUserId!,
+                                systemId: _room.trpgType,
+                              );
+                            }
+                          }
+                        ),
+                );
+              },
             ),
-            Expanded(
-              child: _participants.isEmpty
-                  ? const Center(child: Text('참여자가 없습니다.'))
-                  : ListView.builder(
-                      itemCount: _participants.length,
-                      itemBuilder: (context, index) {
-                        final p = _participants[index];
-                        final bool isCreator =
-                            _room.creatorId != null && p.id == _room.creatorId;
-                        return ListTile(
-                          leading: CircleAvatar(
-                              child: Text(p.nickname.isNotEmpty
-                                  ? p.nickname[0].toUpperCase()
-                                  : '?')),
-                          title: Text(p.nickname),
-                          subtitle: Text('ID: ${p.id} / Role: ${p.role}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isCreator)
-                                const Tooltip(
-                                    message: '방장',
-                                    child: Icon(Icons.shield_moon_sharp,
-                                        color: Colors.blue)),
-                              if (p.role == 'GM')
-                                const Tooltip(
-                                    message: 'GM',
-                                    child:
-                                        Icon(Icons.star, color: Colors.amber)),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+            // ▲▲▲ [수정 13 끝] ▲▲▲
+
+            // ▼▼▼ [수정 14] 기존 ListView.builder를 ParticipantCharacterPanel로 교체 ▼▼▼
+            const Expanded(
+              child: ParticipantCharacterPanel(),
             ),
+            // ▲▲▲ [수정 14 끝] ▲▲▲
           ],
         ),
       ),
-      // --- 🚨 [복원 끝] ---
+      // --- 🚨 [수정 끝] ---
 
       bottomNavigationBar: _buildBottomBar(),
       

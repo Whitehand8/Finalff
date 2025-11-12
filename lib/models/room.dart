@@ -9,8 +9,8 @@ class Room {
   final int currentParticipants;
   final List<Participant> participants;
   final int? creatorId;
-  final String system;
-  final int? chatRoomId; // ✅ 1. 채팅방 ID (숫자) 필드 추가
+  final String trpgType; // ✅ 1. 'system'에서 'trpgType'으로 필드명 변경
+  final int? chatRoomId; 
 
   Room({
     this.id,
@@ -20,15 +20,15 @@ class Room {
     this.currentParticipants = 0,
     this.participants = const [],
     this.creatorId,
-    required this.system,
-    this.chatRoomId, // ✅ 2. 생성자에 추가
+    required this.trpgType, // ✅ 2. 생성자 파라미터 변경 (system -> trpgType)
+    this.chatRoomId, 
   });
 
   Map<String, dynamic> toCreateJson() {
     final json = <String, dynamic>{
       'name': name,
       'maxParticipants': maxParticipants,
-      'system': system,
+      'system': trpgType, // ✅ 3. JSON 키는 'system'을 유지, 값은 'trpgType' 사용
     };
 
     // 로컬 변수에 할당 → promotion 가능
@@ -57,8 +57,8 @@ class Room {
       currentParticipants: data['currentParticipants'] as int? ?? 0,
       participants: participants,
       creatorId: data['creatorId'] as int?,
-      system: data['system'] as String? ?? 'coc7e',
-      chatRoomId: data['chat_room_id'] as int?, // ✅ 3. JSON에서 chatRoomId 파싱
+      trpgType: data['system'] as String? ?? 'coc7e', // ✅ 4. 'system' 키에서 읽어 'trpgType'에 할당
+      chatRoomId: data['chat_room_id'] as int?, 
     );
   }
 
@@ -77,8 +77,8 @@ class Room {
     int? currentParticipants,
     List<Participant>? participants,
     int? creatorId,
-    String? system,
-    int? chatRoomId, // ✅ 4. copyWith에 추가
+    String? trpgType, // ✅ 5. copyWith 파라미터 변경 (system -> trpgType)
+    int? chatRoomId, 
   }) {
     return Room(
       id: id ?? this.id,
@@ -88,8 +88,8 @@ class Room {
       currentParticipants: currentParticipants ?? this.currentParticipants,
       participants: participants ?? this.participants,
       creatorId: creatorId ?? this.creatorId,
-      system: system ?? this.system,
-      chatRoomId: chatRoomId ?? this.chatRoomId, // ✅ 5. copyWith에 추가
+      trpgType: trpgType ?? this.trpgType, // ✅ 6. copyWith 로직 변경 (system -> trpgType)
+      chatRoomId: chatRoomId ?? this.chatRoomId, 
     );
   }
 }

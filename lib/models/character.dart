@@ -2,7 +2,7 @@
 
 class Character {
   final int? id;
-  final String uuid; // <-- 1. uuid 필드 추가
+  // final String uuid; // <-- 1. uuid 필드 제거
   final int participantId;
   final int ownerId;
   final String trpgType;
@@ -11,7 +11,7 @@ class Character {
 
   Character({
     this.id,
-    required this.uuid, // <-- 2. 생성자에 추가
+    // required this.uuid, // <-- 2. 생성자에서 제거
     required this.participantId,
     required this.ownerId,
     required this.trpgType,
@@ -34,7 +34,7 @@ class Character {
   factory Character.fromJson(Map<String, dynamic> json) {
     return Character(
       id: json['id'] as int?,
-      uuid: json['uuid'] as String, // <-- 3. fromJson에 추가
+      // uuid: json['uuid'] as String, // <-- 3. fromJson에 제거
       participantId: json['participantId'] as int,
       ownerId: json['ownerId'] as int,
       trpgType: json['trpgType'] as String,
@@ -46,7 +46,7 @@ class Character {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'uuid': uuid, // <-- 4. toJson에 추가
+      // 'uuid': uuid, // <-- 4. toJson에 제거
       'participantId': participantId,
       'ownerId': ownerId,
       'trpgType': trpgType,
@@ -57,7 +57,7 @@ class Character {
 
   Character copyWith({
     int? id,
-    String? uuid, // <-- 5. copyWith에 추가
+    // String? uuid, // <-- 5. copyWith에 제거
     int? participantId,
     int? ownerId,
     String? trpgType,
@@ -66,7 +66,7 @@ class Character {
   }) {
     return Character(
       id: id ?? this.id,
-      uuid: uuid ?? this.uuid, // <-- 6. copyWith에 추가
+      // uuid: uuid ?? this.uuid, // <-- 6. copyWith에 제거
       participantId: participantId ?? this.participantId,
       ownerId: ownerId ?? this.ownerId,
       trpgType: trpgType ?? this.trpgType,

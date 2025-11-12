@@ -15,11 +15,46 @@ class RoomServiceException implements Exception {
 class RoomService {
   static Future<Room> createRoom(Room room) async {
     try {
-      final res = await ApiClient.instance.dio
-          .post('/rooms', data: room.toCreateJson());
-      return Room.fromJson(res.data);
+      final res = await ApiClient.instance.dio.post(
+        '/rooms',
+        data: room.toCreateJson(),
+        // 4xx, 5xx 오류를 DioException으로 던지지 않고 응답(response)으로 받도록 설정
+        options: Options(validateStatus: (status) {
+          return (status ?? 0) >= 200 && (status ?? 0) < 500;
+        }),
+      );
+
+      // [1] 응답 코드를 직접 확인합니다. (방 생성 성공은 201 Created)
+      if (res.statusCode == 201) {
+        // [2] 성공 시에만 Room 객체로 파싱합니다.
+        
+        // 🟢 수정된 부분: 세미콜론(;)을 삭제하고 올바른 파싱/반환 로직을 추가
+        if (res.data != null && res.data['room'] != null) {
+          // 여기서 Room 객체를 파싱하고 *return* 해야 합니다.
+          return Room.fromJson(res.data['room']);
+        } else {
+          // 'room' 키가 없는 비정상적인 201 응답에 대한 예외 처리
+          throw RoomServiceException(
+            '서버로부터 방 정보를 받지 못했습니다. (응답 201)',
+            statusCode: res.statusCode,
+          );
+        }
+
+      } else {
+        // [3] 409를 포함한 다른 모든 오류는 RoomServiceException으로 변환하여 던집니다.
+        throw RoomServiceException(
+          _extractMessage(res.data) ?? '알 수 없는 오류가 발생했습니다.',
+          statusCode: res.statusCode,
+        );
+      }
     } on DioException catch (e) {
+      // [4] Dio 자체 오류 (네트워크 끊김, 타임아웃 등)
       throw _handleDioError(e);
+    } catch (e) {
+      // [5] 이미 RoomServiceException이면 그대로 던지고,
+      //     만약 Room.fromJson 파싱 중 TypeError가 나면 RoomServiceException으로 변환합니다.
+      if (e is RoomServiceException) rethrow;
+      throw RoomServiceException(e.toString());
     }
   }
 

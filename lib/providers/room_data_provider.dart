@@ -57,12 +57,12 @@ class RoomDataProvider extends ChangeNotifier {
 
     try {
       // 1. 참여자 목록 조회
-      final fetchedParticipants = await _roomService.getParticipants(roomId);
+      final fetchedParticipants = await RoomService.getParticipants(roomId);
       _participants = fetchedParticipants;
 
       // 2. 내 참여자 정보 저장 (GM 여부 및 내 participantId 확인용)
       _myParticipant = _participants.firstWhere(
-        (p) => p.userId == _myUserId,
+        (Participant p) => p.userId == _myUserId,
         orElse: () {
           // 방에 참여자가 아닐 경우 예외 발생 (이론상 발생하면 안 됨)
           throw Exception('현재 유저가 방의 참여자가 아닙니다.');
