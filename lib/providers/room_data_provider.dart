@@ -116,6 +116,7 @@ class RoomDataProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _setError(e.toString());
+      rethrow;
     }
   }
 
@@ -144,6 +145,7 @@ class RoomDataProvider extends ChangeNotifier {
       }
     } catch (e) {
       _setError(e.toString());
+      rethrow;
     }
   }
 

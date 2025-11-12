@@ -51,11 +51,16 @@ class CharacterService {
     }
   }
 
-  Future<Character> getCharacter(int participantId) async {
+  Future<Character?> getCharacter(int participantId) async {
     try {
       final res = await _dio.get('/character-sheets/$participantId');
       return Character.fromJson(res.data);
     } on DioException catch (e) {
+      // 2. 404 오류(Not Found)일 경우, 예외를 던지지 않고 null을 반환
+      if (e.response?.statusCode == 404) {
+        return null;
+      }
+      // 3. 404가 아닌 다른 모든 오류는 여전히 예외를 던짐
       throw _handleDioError(e);
     }
   }

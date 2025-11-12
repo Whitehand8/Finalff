@@ -31,7 +31,7 @@ class _ChatListWidgetState extends State<ChatListWidget> {
   String _getSenderNickname(int senderId) {
     // participants 리스트에서 id가 senderId와 일치하는 Participant를 찾습니다.
     final sender = widget.participants.firstWhere(
-      (p) => p.id == senderId,
+      (p) => p.userId == senderId,
       // 만약 참여자 목록에 없는 ID라면 (예: 방을 나간 유저) '알 수 없음'을 반환합니다.
       // ▼▼▼ [수정됨] userId: 0 추가 ▼▼▼
       orElse: () => Participant(

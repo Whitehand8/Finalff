@@ -50,6 +50,7 @@ class _CreateTokenModalState extends State<CreateTokenModal> {
     final vttSocket = context.read<VttSocketService>();
     final tokenService = TokenService.instance;
     final apiClient = ApiClient.instance; // [신규] ApiClient 인스턴스 사용
+    
 
     final String? mapId = vttSocket.scene?.id;
     if (mapId == null) {

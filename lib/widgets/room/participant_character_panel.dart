@@ -27,17 +27,22 @@ class ParticipantCharacterPanel extends StatelessWidget {
           );
         }
 
-        return Container(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- 1. 참여자 목록 ---
-              _buildSectionHeader(context, '참여자', provider.participants.length),
-              _buildParticipantList(context, provider),
+        // ✅ [수정] Column을 SingleChildScrollView로 변경하여 스크롤
+        return SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- 1. 참여자 섹션 ---
+                _buildParticipantSection(context, provider),
 
-              // --- 2. TODO: NPC 목록 (향후 구현) ---
-            ],
+                const SizedBox(height: 24), // 섹션 간 간격
+
+                // --- 2. 캐릭터 시트 섹션 ---
+                _buildCharacterSheetSection(context, provider),
+              ],
+            ),
           ),
         );
       },
@@ -63,68 +68,109 @@ class ParticipantCharacterPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildParticipantList(
+  // === 🟢 [신규] 1. 참여자 섹션 빌드 ===
+  Widget _buildParticipantSection(
       BuildContext context, RoomDataProvider provider) {
     final participants = provider.participants;
 
-    return Expanded(
-      child: ListView.builder(
-        itemCount: participants.length,
-        itemBuilder: (context, index) {
-          final p = participants[index];
-          return _buildParticipantTile(context, provider, p);
-        },
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(context, '참여자', provider.participants.length),
+        ListView.builder(
+          itemCount: participants.length,
+          shrinkWrap: true, // ✅ SingleChildScrollView 내부에서 크기 자동 조절
+          physics:
+              const NeverScrollableScrollPhysics(), // ✅ 부모 스크롤과 충돌 방지
+          itemBuilder: (context, index) {
+            final p = participants[index];
+            // ✅ 캐릭터 시트와 상관없이 참여자 정보만 표시
+            return _buildSimpleParticipantTile(context, provider, p);
+          },
+        ),
+      ],
     );
   }
 
-  /// ── [수정됨] ──
-  /// 참여자 타일 UI (시트가 있으면 CharacterListItem, 없으면 생성 버튼)
-  Widget _buildParticipantTile(
+  // === 🟢 [신규] 참여자 정보만 간단히 표시하는 타일 ===
+  Widget _buildSimpleParticipantTile(
     BuildContext context,
     RoomDataProvider provider,
     Participant p,
   ) {
-    Character? character;
-      try {
-        character = provider.characters.firstWhere((c) => c.participantId == p.id);
-      } catch (e) {
-        character = null; // 일치하는 캐릭터가 없으면 null
-      }
     final bool isMe = provider.myParticipant?.id == p.id;
-    final bool isGM = (provider.myParticipant?.role == 'GM');
+    final bool isGM = p.role == 'GM';
 
-    if (character != null) {
-      // 캐릭터 시트가 있음 (본인 또는 타인)
-      // GM이거나, 내 시트이거나, 공개된 시트일 때만 조회/수정 가능
-      final bool canView = isGM || isMe || character.isPublic;
-      return CharacterListItem(
-      character: character,
-      // ▼▼▼ [수정 3] null 대신 빈 함수 () {} 전달 ▼▼▼
-      onTap: canView
-          ? () {
-              _showEditorModal(
-                context: context,
-                mode: 'update', // 'update' 문자열 전달
-                systemId: provider.roomSystemId,
-                character: character, // 기존 캐릭터 데이터
-              );
-            }
-          : () {}, // 탭 불가능 시 빈 함수 전달
-      // ▲▲▲ 수정 3 끝 ▲▲▲
+    return ListTile(
+      leading: Icon(
+        isGM ? Icons.shield_outlined : Icons.person_outline,
+        color: isGM ? Colors.amber[800] : null,
+      ),
+      title: Text(
+        '${p.nickname}${isMe ? ' (나)' : ''}',
+        style: TextStyle(
+          fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      subtitle: Text(isGM ? 'GM' : 'Player'),
+      dense: true,
     );
   }
 
-    if (isMe) {
-      // 캐릭터 시트가 없고, 본인일 경우 -> 생성 버튼
-      return _buildMyCharacterCreateButton(context, provider);
-    }
+  // === 🟢 [신규] 2. 캐릭터 시트 섹션 빌드 ===
+  Widget _buildCharacterSheetSection(
+      BuildContext context, RoomDataProvider provider) {
+    final characters = provider.characters;
+    final bool isGM = provider.isGM;
+    final int? myId = provider.myParticipant?.id;
 
-    // 캐릭터 시트가 없고, 타인일 경우 -> 빈 공간
-    return const SizedBox.shrink();
+    // 내가 시트를 이미 만들었는지 확인
+    final bool iHaveSheet = characters.any((c) => c.participantId == myId);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(context, '캐릭터 시트', characters.length),
+        
+        // 캐릭터 시트 목록
+        ListView.builder(
+          itemCount: characters.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemBuilder: (context, index) {
+            final character = characters[index];
+            final bool isMe = character.participantId == myId;
+
+            // GM이거나, 내 시트이거나, 공개된 시트일 때만 조회/수정 가능
+            final bool canView = isGM || isMe || character.isPublic;
+
+            return CharacterListItem(
+              character: character,
+              onTap: canView
+                  ? () {
+                      // ✅ [기존 로직 재사용] 수정 모드로 모달 열기
+                      _showEditorModal(
+                        context: context,
+                        mode: 'update',
+                        systemId: provider.roomSystemId,
+                        character: character,
+                      );
+                    }
+                  : () {}, // 탭 불가능
+            );
+          },
+        ),
+
+        const SizedBox(height: 16),
+
+        // ✅ '내 시트 추가' 버튼 (시트가 없을 때만 표시)
+        if (myId != null && !iHaveSheet)
+          _buildMyCharacterCreateButton(context, provider),
+      ],
+    );
   }
 
-  /// '내 캐릭터 시트 추가' 버튼
+  /// '내 캐릭터 시트 추가' 버튼 (기존 코드와 동일)
   Widget _buildMyCharacterCreateButton(
     BuildContext context,
     RoomDataProvider provider,
@@ -153,8 +199,7 @@ class ParticipantCharacterPanel extends StatelessWidget {
     );
   }
 
-  /// ── [수정됨] ──
-  /// 생성/수정 모달을 띄우는 함수 (로직 완성)
+  /// 생성/수정 모달을 띄우는 함수 (이전 수정사항이 적용된 상태)
   void _showEditorModal({
     required BuildContext context,
     required String mode, // 'create' 또는 'update' 문자열
@@ -162,14 +207,10 @@ class ParticipantCharacterPanel extends StatelessWidget {
     Character? character, // 수정 모드일 때만 전달
     int? myParticipantId, // 생성 모드일 때만 전달
   }) {
-    // ▼▼▼ [수정 2/2] 모달 호출 로직을 완성합니다. ▼▼▼
-
     final SheetEditorMode editorMode =
         (mode == 'create') ? SheetEditorMode.create : SheetEditorMode.update;
 
     // participantId 결정:
-    // - 생성 모드: myParticipantId 사용
-    // - 수정 모드: character!.participantId 사용 (character_service에서 이미 participantId를 사용함)
     final int participantId;
     if (editorMode == SheetEditorMode.create) {
       assert(myParticipantId != null, '생성 모드에는 myParticipantId가 필요합니다.');
@@ -180,17 +221,22 @@ class ParticipantCharacterPanel extends StatelessWidget {
       participantId = character!.participantId;
     }
 
+    // ✅ [중요] 모달을 띄우기 전, 현재 context에서 provider를 읽어옵니다.
+    final provider = context.read<RoomDataProvider>();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true, // 시트가 화면의 많은 부분을 차지하도록 함
       builder: (ctx) {
-        // CharacterSheetEditorModal이 Scaffold를 포함하고 있으므로
-        // 별도 패딩 없이 바로 위젯을 반환합니다.
-        return CharacterSheetEditorModal(
-          mode: editorMode,
-          systemId: systemId,
-          participantId: participantId,
-          character: character,
+        // ✅ [중요] 모달에 provider를 주입합니다.
+        return ChangeNotifierProvider.value(
+          value: provider,
+          child: CharacterSheetEditorModal(
+            mode: editorMode,
+            systemId: systemId,
+            participantId: participantId,
+            character: character,
+          ),
         );
       },
     );
