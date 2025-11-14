@@ -394,16 +394,19 @@ void _updateControllerValue(Matrix4 targetMatrix, {bool runImmediately = false})
               onPositionChanged: (newX, newY) {
                 vttSocket.moveToken(token.id, newX, newY);
               },
-              onSizeChanged: (newWidth, newHeight) {
+              onSizeChanged: (newWidth, newHeight) async {
                 debugPrint(
                     '[Canvas] Token ${token.id} size changed: $newWidth x $newHeight');
-                TokenService.instance.updateToken(
-                  token.id,
-                  width: newWidth,
-                  height: newHeight,
-                ).catchError((e) {
+                try {
+                  await TokenService.instance.updateToken(
+                    token.id,
+                    width: newWidth,
+                    height: newHeight,
+                  );
+                } catch (e) {
+                  // 3. .catchError 대신 catch 블록에서 오류 처리
                   debugPrint('[Canvas] Token size update error: $e');
-                });
+                }
               },
             ),
           ),
@@ -619,7 +622,7 @@ class _TokenItemState extends State<_TokenItem> {
                 widget.onSizeChanged(_currentWidth, _currentHeight);
               },
               // 이동(Pan) 제스처가 메인 토큰으로 전달되지 않도록 막음
-              onPanUpdate: (details) {},
+              
               child: Container(
                 width: 24, // 핸들 크기
                 height: 24,
@@ -763,7 +766,7 @@ class _MapAssetItemState extends State<_MapAssetItem> {
               onScaleEnd: (details) {
                 widget.onSizeChanged(_currentWidth, _currentHeight);
               },
-              onPanUpdate: (details) {}, // 메인 이동 제스처 방해 방지
+               // 메인 이동 제스처 방해 방지
               child: Container(
                 width: 24,
                 height: 24,
