@@ -37,8 +37,8 @@ class VttScene {
     required this.imageX,
     required this.imageY,
     // [수정됨] 로컬 필드
-    this.localWidth = 1000,
-    this.localHeight = 800,
+    this.localWidth = 4000,
+    this.localHeight = 4000,
     this.isActive = false,
     this.properties = const {},
   });
@@ -70,8 +70,8 @@ class VttScene {
       imageY: (j['imageY'] as num?)?.toDouble() ?? 0.0,
       
       // --- 로컬 전용 필드 (서버 값 X) ---
-      localWidth: (j['width'] as num?)?.toInt() ?? 1000, 
-      localHeight: (j['height'] as num?)?.toInt() ?? 800, 
+      localWidth: (j['width'] as num?)?.toInt() ?? 4000, 
+      localHeight: (j['height'] as num?)?.toInt() ?? 4000, 
       isActive: j['isActive'] as bool? ?? false, 
 
       properties: props,

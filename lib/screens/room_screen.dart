@@ -765,15 +765,25 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             const Positioned.fill(child: VttCanvas()), // [수정] VttCanvas -> VTTCanvas
             
             // ▼▼▼ [수정 12] Consumer로 Provider의 participants를 ChatListWidget에 전달 ▼▼▼
-            Consumer<RoomDataProvider>(
-              builder: (context, roomData, child) {
-                return ChatListWidget(
-                  participants: roomData.participants,
-                  currentUserId: _currentUserId,
-                );
-              }
-            ),
+            
+              Positioned(     // 👈 1. 'Positioned.fill'을 'Positioned'로 변경
+                // --- 2. 채팅창의 위치와 크기를 강제로 지정 ---
+                bottom: 80,     // 하단 채팅 입력창 바로 위에 위치 (값은 조절 필요)
+                left: 20,       // VTT와 겹치도록 좌우 여백
+                right: 20,
+                height: 300,
+                child:IgnorePointer(
+                  child:Consumer<RoomDataProvider>(
+                    builder: (context, roomData, child) {
+                      return ChatListWidget(
+                      participants: roomData.participants,
+                      currentUserId: _currentUserId,
+                    );
+                  }
+                ),
             // ▲▲▲ [수정 12 끝] ▲▲▲
+              ),
+            ),
           ],
         );
       }),
@@ -830,15 +840,59 @@ class RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       
       // --- 🚨 [복원됨] NPC 생성 버튼 ---
       floatingActionButton: _isCurrentUserGm
-          ? FloatingActionButton(
-              onPressed: _showCreateNpcModal, // [복원됨]
-              tooltip: 'NPC 생성',
-              child: const Icon(Icons.add),
-              backgroundColor: Colors.brown[700], 
-            )
-          : null, 
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.endDocked, 
+    // 1. VttSocketService의 상태를 실시간으로 감시하기 위해 Consumer로 감쌉니다.
+    ? Consumer<VttSocketService>(
+        builder: (context, vttSocket, child) {
+          // 2. vttSocket에서 현재 업로드 중인지 상태를 가져옵니다.
+          final bool isUploading = vttSocket.isUploading;
+
+          // 3. Row를 사용해 버튼을 가로로 나란히 배치합니다.
+          return Row(
+            mainAxisSize: MainAxisSize.min, // Row가 필요한 만큼만 공간 차지
+            mainAxisAlignment: MainAxisAlignment.end, // 오른쪽 정렬
+            children: [
+              // 4. [신규] 맵에 이미지 업로드 버튼 (요청하신 버튼)
+              FloatingActionButton(
+                onPressed: isUploading
+                    ? null // 업로드 중이면 버튼 비활성화
+                    : () {
+                        // 5. vtt_socket_service의 triggerImageUpload 함수를 호출합니다.
+                        vttSocket.triggerImageUpload();
+                      },
+                tooltip: '맵에 이미지 업로드',
+                // 6. Hero 태그는 화면 전환 애니메이션을 위해 고유해야 합니다.
+                heroTag: 'fab-add-map-image',
+                backgroundColor: isUploading
+                    ? Colors.grey // 업로드 중이면 회색
+                    : Colors.blueGrey[600],
+                child: isUploading
+                    // 업로드 중이면 로딩 아이콘 표시
+                    ? const CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 3,
+                      )
+                    : const Icon(Icons.add_photo_alternate),
+              ),
+
+              // 7. [간격] 요청하신 '약간의 간격'
+              const SizedBox(width: 8),
+
+              // 8. [기존] NPC 생성 버튼
+              FloatingActionButton(
+                onPressed: _showCreateNpcModal,
+                tooltip: 'NPC 생성',
+                heroTag: 'fab-add-npc', // 6. Hero 태그 고유하게 설정
+                backgroundColor: Colors.brown[700],
+                // 아이콘을 좀 더 명확한 것으로 변경 (선택 사항)
+                child: const Icon(Icons.person_add_alt_1),
+              ),
+            ],
+          );
+        },
+      )
+    : null, // GM이 아니면 아무 버튼도 보이지 않음
+floatingActionButtonLocation:
+    FloatingActionButtonLocation.endDocked,
       // --- 🚨 [복원 끝] ---
     );
   }
