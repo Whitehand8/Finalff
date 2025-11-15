@@ -485,6 +485,7 @@ class _TokenItemState extends State<_TokenItem> {
   // [신규] 크기 조절 제스처 시작 시점의 크기
   double _initialWidth = 0;
   double _initialHeight = 0;
+  bool _isResizing = false;
 
   @override
   void initState() {
@@ -500,6 +501,11 @@ class _TokenItemState extends State<_TokenItem> {
   @override
   void didUpdateWidget(covariant _TokenItem oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!mounted) return; // [수정] 위젯이 unmount된 후 setState 방지
+    
+    // [수정] _isResizing 중일 때는 외부(서버) 업데이트 무시 (스냅백 방지)
+    if (_isResizing) return; 
+
     if (widget.token.width != oldWidget.token.width ||
         widget.token.height != oldWidget.token.height ||
         widget.token.x != oldWidget.token.x ||
@@ -532,7 +538,17 @@ class _TokenItemState extends State<_TokenItem> {
         children: [
           // --- 1. 토큰 본체 (드래그하여 '이동') ---
           GestureDetector(
+            // [수정 1] '이동' 시작 시, _isResizing 플래그를 'false'로 설정
+            onPanStart: (details) {
+              if (!mounted) return;
+              setState(() {
+                _isResizing = false;
+              });
+            },
             onPanUpdate: (details) {
+              // [수정 2] '크기 조절' 중이면 '이동'을 막음
+              if (_isResizing || !mounted) return;
+
               // 맵 스케일을 보정하여 이동 거리 계산
               final double dx = details.delta.dx / _currentMapScale;
               final double dy = details.delta.dy / _currentMapScale;
@@ -543,7 +559,14 @@ class _TokenItemState extends State<_TokenItem> {
               });
             },
             onPanEnd: (details) {
-              // 이동이 끝나면 서버에 최종 위치 전송
+              // [수정 3] '크기 조절' 중이었다면 플래그만 리셋
+              if (_isResizing) {
+                if (mounted) {
+                  setState(() { _isResizing = false; });
+                }
+                return;
+              }
+              // '이동'이었을 때만 서버에 최종 위치 전송
               widget.onPositionChanged(_currentX, _currentY);
             },
             child: Tooltip(
@@ -600,29 +623,46 @@ class _TokenItemState extends State<_TokenItem> {
             right: -8, // 잡기 쉽도록 토큰 밖으로 살짝 뺌
             bottom: -8,
             child: GestureDetector(
-              onScaleStart: (details) {
+              // [수정 4] onScaleStart -> onPanStart
+              onPanStart: (details) {
+                if (!mounted) return;
+                // '크기 조절 중'으로 플래그 설정
+                setState(() {
+                  _isResizing = true;
+                });
                 // 제스처 시작 시점의 크기를 저장
                 _initialWidth = _currentWidth;
                 _initialHeight = _currentHeight;
               },
-              onScaleUpdate: (details) {
-                // 제스처의 배율(scale)을 시작 크기에 곱하여 새 크기 계산
-                // (비율 유지를 위해 동일한 배율 사용)
-                setState(() {
-                  _currentWidth = _initialWidth * details.scale;
-                  _currentHeight = _initialHeight * details.scale;
+              // [수정 5] onScaleUpdate -> onPanUpdate
+              onPanUpdate: (details) {
+                if (!mounted) return;
+                // [수정 6] '배율(scale)' 대신 '이동량(delta)'으로 크기 계산
+                final double dx = details.delta.dx / _currentMapScale;
+                // 가로/세로 비율 유지를 위해
+                final double ratio = (_initialHeight == 0 || _initialWidth == 0) ? 1 : _initialHeight / _initialWidth;
 
+
+                setState(() {
+                  _currentWidth += dx;
                   // 최소 크기 제한
                   if (_currentWidth < 20) _currentWidth = 20;
-                  if (_currentHeight < 20) _currentHeight = 20;
+
+                  _currentHeight = _currentWidth * ratio; // 비율에 맞춰 높이 조절
+                  if (_currentHeight < 20) {
+                     _currentHeight = 20;
+                     _currentWidth = _currentHeight / ratio; // 비율에 맞춰 너비 재조정
+                     if (_currentWidth < 20) _currentWidth = 20; // 너비도 최소값 보장
+                  }
                 });
               },
-              onScaleEnd: (details) {
+              // [수정 7] onScaleEnd -> onPanEnd
+              onPanEnd: (details) {
+                // (플래그 리셋은 onPanEnd(본체) 쪽에서 처리)
                 // 크기 조절이 끝나면 서버에 최종 크기 전송
                 widget.onSizeChanged(_currentWidth, _currentHeight);
               },
               // 이동(Pan) 제스처가 메인 토큰으로 전달되지 않도록 막음
-              
               child: Container(
                 width: 24, // 핸들 크기
                 height: 24,
@@ -674,6 +714,8 @@ class _MapAssetItemState extends State<_MapAssetItem> {
   double _initialWidth = 0;
   double _initialHeight = 0;
 
+  bool _isResizing = false;
+
   @override
   void initState() {
     super.initState();
@@ -686,6 +728,11 @@ class _MapAssetItemState extends State<_MapAssetItem> {
   @override
   void didUpdateWidget(covariant _MapAssetItem oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!mounted) return; // [수정] 위젯이 unmount된 후 setState 방지
+
+    // [수정] _isResizing 중일 때는 외부(서버) 업데이트 무시 (스냅백 방지)
+    if (_isResizing) return;
+
     // 다른 유저에 의해 변경되었을 때 로컬 상태 동기화
     if (widget.asset.width != oldWidget.asset.width ||
         widget.asset.height != oldWidget.asset.height ||
@@ -715,7 +762,17 @@ class _MapAssetItemState extends State<_MapAssetItem> {
         children: [
           // --- 1. 에셋 본체 (드래그하여 '이동') ---
           GestureDetector(
+            // [수정 1] '이동' 시작 시, _isResizing 플래그를 'false'로 설정
+            onPanStart: (details) {
+              if (!mounted) return;
+              setState(() {
+                _isResizing = false;
+              });
+            },
             onPanUpdate: (details) {
+              // [수정 2] '크기 조절' 중이면 '이동'을 막음
+              if (_isResizing || !mounted) return;
+
               final double dx = details.delta.dx / _currentMapScale;
               final double dy = details.delta.dy / _currentMapScale;
               setState(() {
@@ -724,6 +781,14 @@ class _MapAssetItemState extends State<_MapAssetItem> {
               });
             },
             onPanEnd: (details) {
+              // [수정 3] '크기 조절' 중이었다면 플래그만 리셋
+              if (_isResizing) {
+                if (mounted) {
+                  setState(() { _isResizing = false; });
+                }
+                return;
+              }
+              // '이동'이었을 때만 API 호출
               widget.onPositionChanged(_currentX, _currentY);
             },
             child: Opacity(
@@ -751,19 +816,40 @@ class _MapAssetItemState extends State<_MapAssetItem> {
             right: -8,
             bottom: -8,
             child: GestureDetector(
-              onScaleStart: (details) {
+              // [수정 4] onScaleStart -> onPanStart
+              onPanStart: (details) {
+                if (!mounted) return;
+                // '크기 조절 중'으로 플래그 설정
+                setState(() {
+                  _isResizing = true;
+                });
                 _initialWidth = _currentWidth;
                 _initialHeight = _currentHeight;
               },
-              onScaleUpdate: (details) {
+              // [수정 5] onScaleUpdate -> onPanUpdate
+              onPanUpdate: (details) {
+                if (!mounted) return;
+                // [수정 6] '배율(scale)' 대신 '이동량(delta)'으로 크기 계산
+                final double dx = details.delta.dx / _currentMapScale;
+                // 가로/세로 비율 유지를 위해
+                final double ratio = (_initialHeight == 0 || _initialWidth == 0) ? 1 : _initialHeight / _initialWidth;
+
                 setState(() {
-                  _currentWidth = _initialWidth * details.scale;
-                  _currentHeight = _initialHeight * details.scale;
+                  _currentWidth += dx;
+                  // 최소 크기 제한
                   if (_currentWidth < 20) _currentWidth = 20;
-                  if (_currentHeight < 20) _currentHeight = 20;
+                  
+                  _currentHeight = _currentWidth * ratio; // 비율에 맞춰 높이 조절
+                  if (_currentHeight < 20) {
+                     _currentHeight = 20;
+                     _currentWidth = _currentHeight / ratio; // 비율에 맞춰 너비 재조정
+                     if (_currentWidth < 20) _currentWidth = 20; // 너비도 최소값 보장
+                  }
                 });
               },
-              onScaleEnd: (details) {
+              // [수정 7] onScaleEnd -> onPanEnd
+              onPanEnd: (details) {
+                // (플래그 리셋은 onPanEnd(본체) 쪽에서 처리)
                 widget.onSizeChanged(_currentWidth, _currentHeight);
               },
                // 메인 이동 제스처 방해 방지
